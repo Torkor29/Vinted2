@@ -41,7 +41,7 @@ const defaults = {
   // ── Session management ──
   session: {
     maxRequestsPerSession: 80,
-    poolSizePerCountry: 3,
+    poolSizePerCountry: 5,       // 5 sessions per country (was 3)
     rotateOnConsecutiveEmpty: 3,
     rotateOnErrors: 5,
     healthCheckIntervalMs: 60_000,
@@ -69,12 +69,12 @@ const defaults = {
 
   // ── Scraper settings ──
   scraper: {
-    pollIntervalMs: 5_000,
+    pollIntervalMs: 2_000,       // 2s default (can go to 1s with enough sessions)
     retryAttempts: 3,
-    retryBackoffMs: 2_000,
-    requestTimeoutMs: 15_000,
+    retryBackoffMs: 1_500,
+    requestTimeoutMs: 10_000,    // 10s timeout (was 15s)
     // Max concurrent queries per poll cycle
-    concurrentQueries: 3,
+    concurrentQueries: 5,        // 5 parallel requests (was 3)
   },
 
   // ── Search queries ──

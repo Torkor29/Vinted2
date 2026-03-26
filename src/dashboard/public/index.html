@@ -195,6 +195,7 @@
   <div class="tab" onclick="switchTab('autobuy')">🤖 Autobuy</div>
   <div class="tab" onclick="switchTab('monitor')">👁 Monitoring</div>
   <div class="tab" onclick="switchTab('stats')">📊 Stats</div>
+  <div class="tab" onclick="switchTab('stock')">📦 Stock</div>
 </div>
 
 <!-- ══════════ PAGE: FEED ══════════ -->
@@ -545,6 +546,65 @@
   </div>
 </div>
 
+<!-- ══════════ PAGE: STOCK (CRM) ══════════ -->
+<div class="page" id="p-stock">
+  <!-- Stats row -->
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px">
+    <div class="stat-card"><div class="sn" id="crm-total">0</div><div class="sl">Total</div></div>
+    <div class="stat-card"><div class="sn" id="crm-stock" style="color:var(--accent)">0</div><div class="sl">En stock</div></div>
+    <div class="stat-card"><div class="sn" id="crm-vente" style="color:#10b981">0</div><div class="sl">En vente</div></div>
+    <div class="stat-card"><div class="sn" id="crm-sold" style="color:#06d6a0">0</div><div class="sl">Vendus</div></div>
+    <div class="stat-card"><div class="sn" id="crm-profit" style="color:#f59e0b">0€</div><div class="sl">Profit total</div></div>
+    <div class="stat-card"><div class="sn" id="crm-relance" style="color:#ef4444">0</div><div class="sl">A relancer</div></div>
+  </div>
+
+  <!-- Filter bar -->
+  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+    <select id="crm-filter-status" onchange="loadCRMInventory()" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px">
+      <option value="">Tous les statuts</option>
+      <option value="achete">📦 Acheté</option>
+      <option value="expedie">🚚 Expédié</option>
+      <option value="recu">✅ Reçu</option>
+      <option value="en_vente">🏷️ En vente</option>
+      <option value="vendu">💰 Vendu</option>
+      <option value="annule">❌ Annulé</option>
+    </select>
+    <input id="crm-filter-brand" placeholder="Filtrer par marque..." oninput="loadCRMInventory()" style="flex:1;padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px">
+    <button class="btn btn-a" onclick="showAddManualForm()" style="padding:6px 12px;font-size:12px">+ Ajout manuel</button>
+  </div>
+
+  <!-- Manual add form (hidden by default) -->
+  <div id="crm-add-form" style="display:none;background:var(--bg2);padding:12px;border-radius:8px;margin-bottom:12px;border:1px solid var(--border)">
+    <div style="font-weight:600;margin-bottom:8px">Ajouter un article manuellement</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <input id="crm-add-title" placeholder="Titre" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+      <input id="crm-add-brand" placeholder="Marque" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+      <input id="crm-add-size" placeholder="Taille" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+      <input id="crm-add-price" type="number" placeholder="Prix d'achat (€)" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+      <input id="crm-add-condition" placeholder="État" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+      <input id="crm-add-url" placeholder="URL Vinted (optionnel)" style="padding:6px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-a" onclick="submitManualAdd()" style="padding:6px 16px;font-size:12px">Ajouter</button>
+      <button class="btn" onclick="document.getElementById('crm-add-form').style.display='none'" style="padding:6px 16px;font-size:12px;background:var(--bg3)">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Inventory table -->
+  <div id="crm-inventory" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div id="crm-empty" class="empty" style="display:none">
+    <div class="eic">📦</div>
+    <div style="font-size:14px;font-weight:600">Aucun article en stock</div>
+    <div style="font-size:11px;margin-top:4px;color:var(--text3)">Les articles achetés (autobuy ou dry run) apparaîtront ici automatiquement</div>
+  </div>
+
+  <!-- Profit by brand -->
+  <div class="sec" style="margin-top:16px">
+    <div class="sec-t">📊 Marges par marque</div>
+    <div id="crm-brand-stats" style="font-size:11px;color:var(--text3)">—</div>
+  </div>
+</div>
+
 <script>
 // ══════════ STATE ══════════
 let items = [], cat = {}, newCount = 0, connected = false, botRunning = false;
@@ -559,6 +619,8 @@ socket.on('stats', d => { updateStats(d); updateSessions(d.sessions); updateAB(d
 socket.on('items:backlog', b => { if(b?.length){items=b;renderFeed()} });
 socket.on('item:new', it => { items.unshift(it); if(items.length>200)items.pop(); newCount++; renderFeed(); });
 socket.on('queries:updated', q => { renderQueryCards(q); renderActiveFilters(q); });
+socket.on('crm:new', () => { if(document.getElementById('p-stock')?.classList.contains('active')) loadCRMInventory(); });
+socket.on('crm:updated', () => { if(document.getElementById('p-stock')?.classList.contains('active')) loadCRMInventory(); });
 // Guard: ignore bot:status events for 3s after user clicks start/stop
 // to prevent race condition where a stale server event overrides the button state
 let botBtnLocked = false;
@@ -580,6 +642,7 @@ function switchTab(name){
   // Load tab-specific data
   if(name==='deals'){loadDeals();loadFavorites()}
   if(name==='stats'){fetch('/api/stats').then(r=>r.json()).then(updateFullStats).catch(()=>{})}
+  if(name==='stock'){loadCRMInventory()}
 }
 
 // ══════════ API ══════════
@@ -974,10 +1037,115 @@ async function toggleFav(id){
 // Quick buy: opens Vinted item page directly so user can buy with one click
 function quickBuy(url){
   if(!url){alert('URL non disponible');return}
-  // Open in new tab — user completes purchase on Vinted directly
-  const w=window.open(url,'_blank');
+  // Vinted buy page: append /buy to item URL for direct checkout
+  // e.g. https://www.vinted.fr/items/12345-nike/buy
+  let buyUrl = url;
+  if(url.includes('/items/') && !url.includes('/buy')){
+    buyUrl = url.replace(/\/?$/, '') + '/buy';
+  }
+  const w=window.open(buyUrl,'_blank');
   if(w)w.focus();
 }
+// ══════════ CRM / STOCK ══════════
+const CRM_STATUS_LABELS={'achete':'📦 Acheté','expedie':'🚚 Expédié','recu':'✅ Reçu','en_vente':'🏷️ En vente','vendu':'💰 Vendu','annule':'❌ Annulé'};
+const CRM_STATUS_COLORS={'achete':'#f59e0b','expedie':'#3b82f6','recu':'#8b5cf6','en_vente':'#10b981','vendu':'#06d6a0','annule':'#ef4444'};
+const CRM_NEXT_STATUS={'achete':['expedie','recu'],'expedie':['recu'],'recu':['en_vente'],'en_vente':['vendu'],'vendu':[],'annule':[]};
+
+async function loadCRMInventory(){
+  const status=document.getElementById('crm-filter-status')?.value||'';
+  const brand=document.getElementById('crm-filter-brand')?.value||'';
+  const params=new URLSearchParams();
+  if(status)params.set('status',status);
+  if(brand)params.set('brand',brand);
+  const items=await api('GET',`/crm/inventory?${params}`);
+  const stats=await api('GET','/crm/stats');
+
+  // Stats
+  if(stats){
+    document.getElementById('crm-total').textContent=stats.total||0;
+    document.getElementById('crm-stock').textContent=stats.inStock||0;
+    document.getElementById('crm-vente').textContent=stats.enVente||0;
+    document.getElementById('crm-sold').textContent=stats.sold||0;
+    document.getElementById('crm-profit').textContent=(stats.totalProfit||0)+'€';
+    document.getElementById('crm-relance').textContent=stats.needRelance||0;
+
+    // Brand stats
+    const bs=stats.byBrand||{};
+    document.getElementById('crm-brand-stats').innerHTML=Object.keys(bs).length?
+      Object.entries(bs).sort((a,b)=>b[1].profit-a[1].profit).map(([b,d])=>
+        `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span><b>${esc(b)}</b> (${d.count} vendus)</span><span style="color:${d.profit>=0?'var(--accent)':'#ef4444'}">${d.profit>=0?'+':''}${d.profit}€</span></div>`
+      ).join(''):'Aucune vente pour le moment';
+  }
+
+  // Inventory list
+  const el=document.getElementById('crm-inventory');
+  const empty=document.getElementById('crm-empty');
+  if(!items||!items.length){el.innerHTML='';empty.style.display='block';return}
+  empty.style.display='none';
+
+  el.innerHTML=items.map(it=>{
+    const col=CRM_STATUS_COLORS[it.status]||'#666';
+    const label=CRM_STATUS_LABELS[it.status]||it.status;
+    const next=CRM_NEXT_STATUS[it.status]||[];
+    const margin=it.netProfit?` | Marge: ${it.netProfit>=0?'+':''}${it.netProfit}€ (${it.marginPercent}%)`:'';
+    const dryTag=it.dryRun?'<span style="background:#f59e0b;color:#000;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px">DRY RUN</span>':'';
+    const actionBtns=next.map(s=>
+      `<button class="btn" style="padding:3px 8px;font-size:10px;background:${CRM_STATUS_COLORS[s]};color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();crmChangeStatus(${it.id},'${s}')">${CRM_STATUS_LABELS[s]}</button>`
+    ).join(' ');
+    const soldBtn=it.status==='en_vente'?`<button class="btn" style="padding:3px 8px;font-size:10px;background:#06d6a0;color:#000;border:none;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();crmMarkSold(${it.id})">💰 Marquer vendu</button>`:'';
+
+    return `<div style="background:var(--bg2);border-radius:8px;padding:10px 12px;border-left:3px solid ${col};display:flex;align-items:center;gap:12px">
+      ${it.photo?`<img src="${it.photo}" style="width:50px;height:50px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'">`:''}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${esc(it.title)}${dryTag}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">
+          ${esc(it.brand||'')} · ${esc(it.size||'')} · ${esc(it.condition||'')} · Acheté ${it.purchasePrice}€${it.resalePrice?' · Revente '+it.resalePrice+'€':''}${margin}
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">
+          ${it.seller?'Vendeur: '+esc(it.seller)+' · ':''}${it.autobuyRule?'Règle: '+esc(it.autobuyRule)+' · ':''}${new Date(it.createdAt).toLocaleDateString('fr-FR')}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span style="background:${col};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;white-space:nowrap">${label}</span>
+        <div style="display:flex;gap:4px">${actionBtns}${soldBtn}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function crmChangeStatus(id,status){
+  await api('PATCH',`/crm/inventory/${id}/status`,{status});
+  loadCRMInventory();
+}
+
+async function crmMarkSold(id){
+  const price=prompt('Prix de vente (€) :');
+  if(!price)return;
+  const channel=prompt('Canal de vente (vinted, vestiaire, depop, autre) :','vinted');
+  await api('POST',`/crm/inventory/${id}/sold`,{price:parseFloat(price),channel:channel||''});
+  loadCRMInventory();
+}
+
+function showAddManualForm(){
+  document.getElementById('crm-add-form').style.display='block';
+}
+
+async function submitManualAdd(){
+  const data={
+    title:document.getElementById('crm-add-title').value,
+    brand:document.getElementById('crm-add-brand').value,
+    size:document.getElementById('crm-add-size').value,
+    price:parseFloat(document.getElementById('crm-add-price').value)||0,
+    condition:document.getElementById('crm-add-condition').value,
+    url:document.getElementById('crm-add-url').value,
+  };
+  if(!data.title||!data.price){alert('Titre et prix requis');return}
+  await api('POST','/crm/inventory',data);
+  document.getElementById('crm-add-form').style.display='none';
+  ['title','brand','size','price','condition','url'].forEach(f=>document.getElementById('crm-add-'+f).value='');
+  loadCRMInventory();
+}
+
 async function loadFavorites(){
   const list=await api('GET','/favorites');
   document.getElementById('favList').innerHTML=(list||[]).map(it=>

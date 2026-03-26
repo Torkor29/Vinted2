@@ -202,7 +202,7 @@ export class VintedSearch {
       brand: raw.brand_title || raw.brand?.title || '',
       size: raw.size_title || raw.size?.title || '',
       condition: raw.status || '',
-      url: raw.url || raw.path || '',
+      url: buildItemUrl(raw, country),
       photos: (raw.photos || raw.photo?.thumbnails || []).map(p =>
         typeof p === 'string' ? p : (p.url || p.full_size_url || ''),
       ),
@@ -284,4 +284,41 @@ export class VintedSearch {
   destroy() {
     clearInterval(this.cleanupTimer);
   }
+}
+
+/**
+ * Build a full clickable URL for an item.
+ * The API sometimes returns relative paths (/items/123) or partial URLs.
+ */
+function buildItemUrl(raw, country) {
+  const rawUrl = raw.url || raw.path || '';
+
+  // Already a full URL
+  if (rawUrl.startsWith('https://')) return rawUrl;
+  if (rawUrl.startsWith('http://')) return rawUrl;
+
+  // Relative path — prepend the domain
+  if (rawUrl.startsWith('/')) {
+    const domains = {
+      fr: 'www.vinted.fr', de: 'www.vinted.de', es: 'www.vinted.es',
+      it: 'www.vinted.it', nl: 'www.vinted.nl', be: 'www.vinted.be',
+      pt: 'www.vinted.pt', pl: 'www.vinted.pl', uk: 'www.vinted.co.uk',
+      us: 'www.vinted.com',
+    };
+    const domain = domains[country] || domains.fr;
+    return `https://${domain}${rawUrl}`;
+  }
+
+  // Just an ID — build the URL from the item ID
+  if (raw.id) {
+    const domains = {
+      fr: 'www.vinted.fr', de: 'www.vinted.de', es: 'www.vinted.es',
+      it: 'www.vinted.it', nl: 'www.vinted.nl', be: 'www.vinted.be',
+      pt: 'www.vinted.pt', uk: 'www.vinted.co.uk',
+    };
+    const domain = domains[country] || domains.fr;
+    return `https://${domain}/items/${raw.id}`;
+  }
+
+  return rawUrl;
 }

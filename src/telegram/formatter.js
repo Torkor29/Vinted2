@@ -121,7 +121,11 @@ export function progressDots(current, total) {
 export function itemKeyboard(item) {
   const buttons = [];
   if (item.url) {
-    buttons.push({ text: '\ud83d\uded2 Acheter', url: item.url });
+    // /buy suffix goes directly to Vinted checkout page
+    const buyUrl = item.url.includes('/items/') && !item.url.includes('/buy')
+      ? item.url.replace(/\/?$/, '') + '/buy'
+      : item.url;
+    buttons.push({ text: '\ud83d\uded2 Acheter', url: buyUrl });
     buttons.push({ text: '\u2197\ufe0f Voir', url: item.url });
   }
   if (item.id) {

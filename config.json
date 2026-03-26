@@ -165,8 +165,8 @@
     },
     "telegram": {
       "enabled": true,
-      "botToken": "",
-      "chatId": "",
+      "botToken": "7713748896:AAFP6cfpjy8miefpyMTAxg_7ZbhSv395iqY",
+      "chatId": "-1003531112231",
       "topicIds": {
         "feed": 27,
         "deals": 28,
@@ -224,6 +224,24 @@
     "format": "json",
     "dir": "exports",
     "intervalMs": 3600000
+  },
+  "crm": {
+    "dataDir": "data",
+    "defaultMarginPercent": 30,
+    "platformFeePercent": 5,
+    "shippingCostDefault": 3,
+    "strategy": "balanced",
+    "relance": {
+      "enabled": true,
+      "checkIntervalMs": 3600000,
+      "tiers": [
+        { "days": 7, "discountPercent": 5 },
+        { "days": 14, "discountPercent": 10 },
+        { "days": 21, "discountPercent": 15 },
+        { "days": 30, "discountPercent": 20 }
+      ],
+      "maxRelances": 4
+    }
   },
   "logging": {
     "level": "info"

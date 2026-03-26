@@ -204,6 +204,104 @@ export class Dashboard {
       res.json(this.modules.arbitrage?.getStats() || {});
     });
 
+    // ── Image Search ──
+    this.app.get('/api/image-search', (req, res) => {
+      res.json(this.modules.imageSearch?.getStats() || { references: 0 });
+    });
+    this.app.get('/api/image-search/references', (req, res) => {
+      res.json(this.modules.imageSearch?.getReferences() || []);
+    });
+    this.app.post('/api/image-search/reference', async (req, res) => {
+      try {
+        const { url, label } = req.body;
+        if (!url) return res.status(400).json({ error: 'url required' });
+        const id = `ref-${Date.now()}`;
+        const result = await this.modules.imageSearch.addReference(id, url, label || '');
+        res.json({ ok: true, ...result });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    this.app.delete('/api/image-search/reference/:id', (req, res) => {
+      this.modules.imageSearch?.removeReference(req.params.id);
+      res.json({ ok: true });
+    });
+    this.app.post('/api/image-search/compare', async (req, res) => {
+      try {
+        const { itemPhotoUrl } = req.body;
+        if (!itemPhotoUrl) return res.status(400).json({ error: 'itemPhotoUrl required' });
+        const result = await this.modules.imageSearch.compareItem({ photo: itemPhotoUrl });
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    this.app.post('/api/image-search/threshold', (req, res) => {
+      const { threshold } = req.body;
+      if (this.modules.imageSearch && typeof threshold === 'number') {
+        this.modules.imageSearch.threshold = Math.max(0.1, Math.min(1.0, threshold));
+      }
+      res.json({ ok: true, threshold: this.modules.imageSearch?.threshold });
+    });
+
+    // ── CRM Inventory ──
+    this.app.get('/api/crm/inventory', (req, res) => {
+      const filters = {};
+      if (req.query.status) filters.status = req.query.status;
+      if (req.query.brand) filters.brand = req.query.brand;
+      if (req.query.channel) filters.channel = req.query.channel;
+      res.json(this.modules.crm?.getAll(filters) || []);
+    });
+    this.app.get('/api/crm/inventory/:id', (req, res) => {
+      const item = this.modules.crm?.getById(parseInt(req.params.id));
+      item ? res.json(item) : res.status(404).json({ error: 'not found' });
+    });
+    this.app.patch('/api/crm/inventory/:id/status', (req, res) => {
+      try {
+        const item = this.modules.crm.updateStatus(parseInt(req.params.id), req.body.status, req.body.note);
+        this.broadcast('crm:updated', item);
+        res.json({ ok: true, item });
+      } catch (e) { res.status(400).json({ error: e.message }); }
+    });
+    this.app.patch('/api/crm/inventory/:id/price', (req, res) => {
+      try {
+        const item = this.modules.crm.updatePrice(parseInt(req.params.id), req.body.price, req.body.reason || 'manual');
+        this.broadcast('crm:updated', item);
+        res.json({ ok: true, item });
+      } catch (e) { res.status(400).json({ error: e.message }); }
+    });
+    this.app.post('/api/crm/inventory/:id/sold', (req, res) => {
+      try {
+        const item = this.modules.crm.markSold(parseInt(req.params.id), req.body.price, req.body.channel);
+        this.broadcast('crm:updated', item);
+        res.json({ ok: true, item });
+      } catch (e) { res.status(400).json({ error: e.message }); }
+    });
+    this.app.post('/api/crm/inventory', (req, res) => {
+      try {
+        const item = this.modules.crm.addManual(req.body);
+        this.broadcast('crm:new', item);
+        res.json({ ok: true, item });
+      } catch (e) { res.status(400).json({ error: e.message }); }
+    });
+    this.app.delete('/api/crm/inventory/:id', (req, res) => {
+      const ok = this.modules.crm?.delete(parseInt(req.params.id));
+      res.json({ ok });
+    });
+    this.app.get('/api/crm/stats', (req, res) => {
+      res.json(this.modules.crm?.getStats() || {});
+    });
+    this.app.get('/api/crm/relance', (req, res) => {
+      const items = this.modules.crm?.getItemsToRelance(7) || [];
+      res.json(items);
+    });
+    this.app.get('/api/crm/pricing/:id', (req, res) => {
+      const item = this.modules.crm?.getById(parseInt(req.params.id));
+      if (!item) return res.status(404).json({ error: 'not found' });
+      const pricing = this.modules.autoPricing?.calculate(item);
+      res.json(pricing || {});
+    });
+
     // Favorites (stored server-side in memory)
     if (!this.favorites) this.favorites = new Set();
     this.app.get('/api/favorites', (req, res) => {

@@ -10,6 +10,10 @@ import { Dashboard } from './dashboard/server.js';
 import { DataExporter } from './utils/exporter.js';
 import { DealScorer } from './intelligence/deal-scorer.js';
 import { ArbitrageDetector } from './intelligence/arbitrage.js';
+import { ImageSearch } from './intelligence/image-search.js';
+import { CRMInventory } from './crm/inventory.js';
+import { AutoPricing } from './crm/pricing.js';
+import { AutoRelance } from './crm/auto-relance.js';
 import { TelegramBot } from './telegram/bot.js';
 import { createLogger } from './utils/logger.js';
 import { sleep } from './utils/retry.js';
@@ -50,6 +54,10 @@ class VintedSniper {
     this.exporter = new DataExporter(config);
     this.dealScorer = new DealScorer();
     this.arbitrage = new ArbitrageDetector();
+    this.imageSearch = new ImageSearch(config.imageSearch || {});
+    this.crm = new CRMInventory(config.crm || {});
+    this.autoPricing = new AutoPricing(config.crm || {});
+    this.autoRelance = null; // initialized after notifier + telegram
     this.dashboard = new Dashboard(config);
     this.telegramBot = null; // initialized in start() if enabled
 
@@ -132,6 +140,9 @@ class VintedSniper {
         proxyManager: this.proxyManager,
         dealScorer: this.dealScorer,
         arbitrage: this.arbitrage,
+        imageSearch: this.imageSearch,
+        crm: this.crm,
+        autoPricing: this.autoPricing,
         sniper: this,
       });
       await this.dashboard.start();
@@ -150,6 +161,11 @@ class VintedSniper {
         log.warn(`Telegram bot failed to start: ${error.message}`);
       }
     }
+
+    // ── Step 5: Start auto-relance (CRM) ──
+    this.autoRelance = new AutoRelance(this.crm, this.notifier, this.telegramBot, config.crm?.relance || {});
+    this.autoRelance.start();
+    log.info(`CRM: ${this.crm.items.size} articles en stock`);
 
     log.info('');
     log.info('⏸️  Bot en attente — configure tes recherches puis clique "Lancer le bot" dans le dashboard');
@@ -225,17 +241,24 @@ class VintedSniper {
       const cycleStart = Date.now();
       this.pollCycles++;
 
-      // Process queries across all countries
+      // ── SPEED OPTIMIZATION: all countries + all queries in parallel ──
+      // Build all (country, query) pairs
+      const tasks = [];
       for (const country of config.countries) {
-        // Run queries concurrently (limited by config.scraper.concurrentQueries)
-        const chunks = chunkArray(this.queries, config.scraper.concurrentQueries);
-
-        for (const chunk of chunks) {
-          if (!this.running) break;
-
-          const promises = chunk.map(query => this.processQuery(country, query));
-          await Promise.allSettled(promises);
+        for (const query of this.queries) {
+          tasks.push({ country, query });
         }
+      }
+
+      // Run all in parallel, limited by concurrency setting
+      const concurrency = config.scraper.concurrentQueries || 3;
+      const chunks = chunkArray(tasks, concurrency);
+
+      for (const chunk of chunks) {
+        if (!this.running) break;
+        await Promise.allSettled(
+          chunk.map(({ country, query }) => this.processQuery(country, query))
+        );
       }
 
       // Push stats to dashboard
@@ -243,9 +266,9 @@ class VintedSniper {
         this.dashboard.pushStats();
       }
 
-      // Wait for next cycle
+      // Wait for next cycle — minimum 1s to avoid hammering
       const elapsed = Date.now() - cycleStart;
-      const waitTime = Math.max(0, config.scraper.pollIntervalMs - elapsed);
+      const waitTime = Math.max(500, config.scraper.pollIntervalMs - elapsed);
 
       if (waitTime > 0 && this.running) {
         await sleep(waitTime);
@@ -266,59 +289,76 @@ class VintedSniper {
       const newItems = await this.search.pollNewItems(country, query);
       this.countryStats[country].lastPoll = new Date().toISOString();
 
+      // ── SPEED: Process items with minimal blocking ──
+      // 1. Score all items synchronously (pure CPU, fast)
       for (const item of newItems) {
         this.totalNewItems++;
         this.countryStats[country].items++;
-
-        // Score deal (adds dealScore, marketMedian, dealLabel, confidence to item)
         this.dealScorer.scoreItem(item);
-
-        // For top-scoring items, fetch full description if not already present
-        if (item.dealScore >= this.fetchDescriptionThreshold && !item.description) {
-          await this.search.enrichWithDescription(country, item);
-        }
-
-        // Check cross-country arbitrage (if multi-country)
-        if (config.countries.length > 1) {
-          const opp = this.arbitrage.checkItem(item, country);
-          if (opp) {
-            await this.notifier.notify('arbitrage', {
-              title: `Arbitrage: ${item.title} — ${opp.profit}EUR profit (${opp.buy.country}->${opp.sell.country})`,
-              item, opportunity: opp,
-            });
-          }
-        }
-
-        // Add to exporter
+        if (config.countries.length > 1) this.arbitrage.checkItem(item, country);
         this.exporter.addItem(item);
+      }
 
-        // Push to dashboard
-        if (config.dashboard.enabled) {
-          this.dashboard.pushNewItem(item);
-        }
-
-        // Telegram: route to appropriate topic
-        if (this.telegramBot) {
-          if (item.dealScore >= 70) {
-            await this.telegramBot.notifyDeal(item).catch(() => {});
-          } else {
-            await this.telegramBot.notifyNewItem(item).catch(() => {});
+      // 1b. Visual matching (if reference images configured)
+      if (this.imageSearch.references.size > 0) {
+        for (const item of newItems) {
+          const match = await this.imageSearch.compareItem(item).catch(() => null);
+          if (match?.matches) {
+            item.visualMatch = match.bestMatch;
+            item.visualSimilarity = match.bestMatch.similarity;
+            log.info(`📸 Visual match: "${item.title}" ≈ "${match.bestMatch.refLabel}" (${match.bestMatch.similarity}%)`);
           }
         }
+      }
 
-        // Notify (only items with good deal scores or all if no score yet)
-        await this.notifier.notifyNewItem(item);
+      // 2. Push ALL items to dashboard immediately (non-blocking)
+      if (config.dashboard.enabled) {
+        for (const item of newItems) this.dashboard.pushNewItem(item);
+      }
 
-        // Autobuy (deal score can boost priority)
-        if (config.autobuy.enabled) {
+      // 3. Autobuy FIRST for time-sensitive purchases (highest priority)
+      if (config.autobuy.enabled) {
+        for (const item of newItems) {
           const result = await this.autoBuyer.tryBuy(country, item);
           if (result.purchased) {
             log.info(`AUTO-PURCHASED: "${item.title}" for ${item.price}EUR (deal: ${item.dealScore})`);
-            if (this.telegramBot) await this.telegramBot.notifyAutobuy(item, result.record).catch(() => {});
+            // Add to CRM inventory
+            const crmEntry = this.crm.addPurchase(item, result.record);
+            if (this.telegramBot) this.telegramBot.notifyAutobuy(item, result.record).catch(() => {});
+            // Push to dashboard
+            if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
           } else if (result.dryRun) {
             log.info(`DRY RUN: Would buy "${item.title}" for ${item.price}EUR (deal: ${item.dealScore})`);
-            if (this.telegramBot) await this.telegramBot.notifyAutobuy(item, { dryRun: true, rule: result.matchedRule }).catch(() => {});
+            // Add dry runs to CRM too (for tracking what WOULD be bought)
+            const crmEntry = this.crm.addPurchase(item, { ...result, dryRun: true, rule: result.matchedRule });
+            if (this.telegramBot) this.telegramBot.notifyAutobuy(item, { dryRun: true, rule: result.matchedRule }).catch(() => {});
+            if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
           }
+        }
+      }
+
+      // 4. Notifications in parallel (fire-and-forget, don't block poll loop)
+      const notifPromises = newItems.map(item => {
+        const promises = [];
+        // Telegram
+        if (this.telegramBot) {
+          if (item.dealScore >= 70) {
+            promises.push(this.telegramBot.notifyDeal(item).catch(() => {}));
+          } else {
+            promises.push(this.telegramBot.notifyNewItem(item).catch(() => {}));
+          }
+        }
+        // Other channels
+        promises.push(this.notifier.notifyNewItem(item).catch(() => {}));
+        return Promise.allSettled(promises);
+      });
+      // Don't await all — let them resolve in background
+      Promise.allSettled(notifPromises).catch(() => {});
+
+      // 5. Enrich descriptions for top deals (background, non-blocking)
+      for (const item of newItems) {
+        if (item.dealScore >= this.fetchDescriptionThreshold && !item.description) {
+          this.search.enrichWithDescription(country, item).catch(() => {});
         }
       }
     } catch (error) {
@@ -449,6 +489,8 @@ class VintedSniper {
     }
     this.search.destroy();
     this.exporter.stop();
+    if (this.autoRelance) this.autoRelance.stop();
+    this.crm.destroy(); // Final save to disk
     if (this.telegramBot) await this.telegramBot.stop().catch(() => {});
     await this.dashboard.stop();
     await this.sessionPool.shutdown();
