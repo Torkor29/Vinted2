@@ -294,8 +294,17 @@ function applyEnvOverrides(config) {
   if (env.SMS_TO) { config.notifications.sms.enabled = true; config.notifications.sms.to = env.SMS_TO; }
   if (env.WEBHOOK_URL) { config.notifications.webhook.enabled = true; config.notifications.webhook.url = env.WEBHOOK_URL; }
 
+  // Render sets PORT env var — use it for dashboard
+  if (env.PORT) { config.dashboard.port = +env.PORT; config.dashboard.host = '0.0.0.0'; }
   if (env.DASHBOARD_PORT) config.dashboard.port = +env.DASHBOARD_PORT;
+  if (env.DASHBOARD_HOST) config.dashboard.host = env.DASHBOARD_HOST;
   if (env.LOG_LEVEL) config.logging.level = env.LOG_LEVEL;
+
+  // Production: don't open browser, don't use desktop notifications
+  if (env.NODE_ENV === 'production') {
+    config.dashboard.openOnStart = false;
+    config.notifications.desktop.enabled = false;
+  }
 }
 
 function validateConfig(config) {

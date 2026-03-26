@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vinted-sniper
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/bot/status
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DASHBOARD_PORT
+        value: "10000"
+      # Set these in Render dashboard (Settings > Environment):
+      # TELEGRAM_BOT_TOKEN
+      # TELEGRAM_CHAT_ID
+      # VINTED_EMAIL (for autobuy)
+      # VINTED_PASSWORD (for autobuy)
+      # DISCORD_WEBHOOK (optional)
