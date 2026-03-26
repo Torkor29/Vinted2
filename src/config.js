@@ -240,10 +240,7 @@ const defaults = {
 function loadConfig() {
   const config = structuredClone(defaults);
 
-  // Override from .env
-  applyEnvOverrides(config);
-
-  // Override from config.json
+  // 1. Override from config.json FIRST
   const configPath = resolve('config.json');
   if (existsSync(configPath)) {
     try {
@@ -253,6 +250,9 @@ function loadConfig() {
       console.warn(`[config] Failed to parse config.json: ${e.message}`);
     }
   }
+
+  // 2. Env vars override LAST (highest priority — critical for Render/Docker)
+  applyEnvOverrides(config);
 
   // Validate
   validateConfig(config);
