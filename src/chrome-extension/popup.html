@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width: 360px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 16px; }
+    h1 { font-size: 18px; margin-bottom: 12px; color: #00d4aa; }
+    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.on { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+    .dot.off { background: #ff4444; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+    .field input, .field select { width: 100%; padding: 8px; border: 1px solid #333; border-radius: 6px; background: #0f0f23; color: #eee; font-size: 13px; }
+    .field input:focus { border-color: #00d4aa; outline: none; }
+    .btn { width: 100%; padding: 10px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+    .btn-primary { background: #00d4aa; color: #000; }
+    .btn-danger { background: #ff4444; color: #fff; }
+    .btn:hover { opacity: 0.9; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .stat { background: #0f0f23; padding: 8px; border-radius: 6px; text-align: center; }
+    .stat .value { font-size: 20px; font-weight: 700; color: #00d4aa; }
+    .stat .label { font-size: 11px; color: #666; }
+    .queries { margin-top: 12px; }
+    .query-item { background: #0f0f23; padding: 8px; border-radius: 6px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .query-item .remove { cursor: pointer; color: #ff4444; font-weight: bold; }
+    hr { border: none; border-top: 1px solid #333; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>Vinted Sniper</h1>
+
+  <div class="status">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Loading...</span>
+  </div>
+
+  <div class="field">
+    <label>Country</label>
+    <select id="country">
+      <option value="fr">France</option>
+      <option value="de">Germany</option>
+      <option value="es">Spain</option>
+      <option value="it">Italy</option>
+      <option value="nl">Netherlands</option>
+      <option value="be">Belgium</option>
+      <option value="pt">Portugal</option>
+      <option value="uk">UK</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Webhook URL (Discord/custom)</label>
+    <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
+  </div>
+
+  <div class="field">
+    <label>Poll Interval (seconds)</label>
+    <input type="number" id="pollInterval" value="5" min="3" max="60">
+  </div>
+
+  <hr>
+
+  <div class="field">
+    <label>Add Search Query</label>
+    <input type="text" id="queryText" placeholder="e.g. nike air max">
+  </div>
+  <div class="field">
+    <label>Max Price (optional)</label>
+    <input type="number" id="queryMaxPrice" placeholder="50">
+  </div>
+  <button class="btn btn-primary" id="addQuery">+ Add Query</button>
+
+  <div class="queries" id="queryList"></div>
+
+  <hr>
+
+  <button class="btn btn-primary" id="toggleBtn">Start</button>
+
+  <div class="stats">
+    <div class="stat"><div class="value" id="statTotal">0</div><div class="label">Total Items</div></div>
+    <div class="stat"><div class="value" id="statNew">0</div><div class="label">New Items</div></div>
+    <div class="stat"><div class="value" id="statErrors">0</div><div class="label">Errors</div></div>
+    <div class="stat"><div class="value" id="statLast">-</div><div class="label">Last Poll</div></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Vinted Sniper",
+  "version": "1.0.0",
+  "description": "Vinted catalog monitor - intercepts API responses in real browser",
+  "permissions": [
+    "webRequest",
+    "storage",
+    "notifications",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://*.vinted.fr/*",
+    "https://*.vinted.de/*",
+    "https://*.vinted.es/*",
+    "https://*.vinted.it/*",
+    "https://*.vinted.nl/*",
+    "https://*.vinted.be/*",
+    "https://*.vinted.pt/*",
+    "https://*.vinted.pl/*",
+    "https://*.vinted.co.uk/*",
+    "https://*.vinted.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.vinted.fr/*",
+        "https://*.vinted.de/*",
+        "https://*.vinted.es/*",
+        "https://*.vinted.it/*",
+        "https://*.vinted.nl/*",
+        "https://*.vinted.be/*",
+        "https://*.vinted.pt/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon48.png"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

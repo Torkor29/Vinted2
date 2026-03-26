@@ -1,0 +1,41 @@
+{
+  "name": "vinted-sniper",
+  "version": "2.0.0",
+  "description": "Production-grade Vinted scraping, monitoring & autobuy system",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "dashboard": "node src/dashboard/server.js",
+    "factory": "node src/cookie-factory/cli.js",
+    "test:session": "node src/test-session.js",
+    "test:api": "node src/tests/api-tester.js",
+    "test:notifications": "node src/tests/notification-tester.js",
+    "export": "node src/utils/exporter.js"
+  },
+  "dependencies": {
+    "got-scraping": "^4.0.8",
+    "playwright": "^1.49.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "winston": "^3.14.2",
+    "cron": "^3.1.7",
+    "dotenv": "^16.4.5",
+    "tough-cookie": "^5.0.0",
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1",
+    "nodemailer": "^6.9.16",
+    "node-notifier": "^10.0.1",
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
+    "socks-proxy-agent": "^8.0.5",
+    "open": "^10.1.0",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "json2csv": "^6.0.0-alpha.2"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}

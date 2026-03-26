@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vinted Sniper</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    :root {
+      --bg: #0b0e14; --bg2: #11151d; --bg3: #161b27; --bg4: #1c2333;
+      --accent: #22d3a7; --accent-dim: #1a9e7e; --accent-bg: rgba(34,211,167,.08);
+      --blue: #3b82f6; --purple: #a855f7; --orange: #f59e0b; --pink: #ec4899;
+      --danger: #ef4444; --success: #22c55e;
+      --text: #e2e8f0; --text2: #94a3b8; --text3: #64748b;
+      --border: #1e293b; --border2: #334155;
+      --r: 10px; --rs: 6px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px}
+    ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+    /* ── Header ── */
+    .hdr{background:var(--bg2);border-bottom:1px solid var(--border);height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:sticky;top:0;z-index:100}
+    .hdr .logo{font-size:15px;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hdr .ri{display:flex;align-items:center;gap:14px;font-size:11px;color:var(--text3)}
+    .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px;transition:.3s}
+    .dot.on{background:var(--success);box-shadow:0 0 6px var(--success)}.dot.off{background:var(--danger)}
+
+    .bot-btn{padding:6px 16px;border:none;border-radius:20px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px}
+    .bot-btn.off{background:var(--accent);color:#000}.bot-btn.off:hover{background:var(--accent-dim);transform:scale(1.03)}
+    .bot-btn.on{background:var(--danger);color:#fff}.bot-btn.on:hover{background:#dc2626;transform:scale(1.03)}
+    .bot-btn.loading{background:var(--orange);color:#000;pointer-events:none;opacity:.8}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .bot-btn.loading #botIcon{animation:spin 1s linear infinite;display:inline-block}
+
+    /* ── Tabs ── */
+    .tabs{display:flex;gap:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px}
+    .tab{padding:10px 18px;font-size:12px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:.2s}
+    .tab:hover{color:var(--text)}
+    .tab.active{color:var(--accent);border-color:var(--accent)}
+
+    /* ── Pages ── */
+    .page{display:none;min-height:calc(100vh - 92px)}
+    .page.active{display:block}
+
+    /* ── Layout ── */
+    .grid2{display:grid;grid-template-columns:340px 1fr;min-height:calc(100vh - 92px)}
+    .grid3{display:grid;grid-template-columns:1fr 300px;min-height:calc(100vh - 92px)}
+    .pan{padding:16px;overflow-y:auto;max-height:calc(100vh - 92px)}
+    .pan-side{background:var(--bg2);border-right:1px solid var(--border);padding:16px;overflow-y:auto;max-height:calc(100vh - 92px)}
+    .pan-r{background:var(--bg2);border-left:1px solid var(--border);padding:16px;overflow-y:auto;max-height:calc(100vh - 92px)}
+
+    /* ── Components ── */
+    .sec{margin-bottom:18px}
+    .sec-t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+    input,select{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-size:12px;font-family:inherit;outline:none;transition:.2s}
+    input:focus,select:focus{border-color:var(--accent)}
+    input::placeholder{color:var(--text3)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 12px;border:none;border-radius:var(--rs);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:.15s}
+    .btn-a{background:var(--accent);color:#000}.btn-a:hover{background:var(--accent-dim)}
+    .btn-g{background:transparent;color:var(--text2);border:1px solid var(--border)}.btn-g:hover{border-color:var(--text2)}
+    .btn-d{background:transparent;color:var(--danger);padding:4px 6px;font-size:14px}.btn-d:hover{background:rgba(239,68,68,.1);border-radius:4px}
+    .btn-full{width:100%}
+    .tag{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+    .tg{background:rgba(34,197,94,.12);color:var(--success)}
+    .tr{background:rgba(239,68,68,.1);color:var(--danger)}
+    .tb{background:rgba(59,130,246,.1);color:var(--blue)}
+    .to{background:rgba(245,158,11,.1);color:var(--orange)}
+    .tp{background:rgba(168,85,247,.1);color:var(--purple)}
+
+    /* ── Stats ── */
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;padding:0 16px;padding-top:16px}
+    .st{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center}
+    .st .v{font-size:24px;font-weight:800;line-height:1}
+    .st .l{font-size:9px;color:var(--text3);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+    .v1{color:var(--accent)}.v2{color:var(--blue)}.v3{color:var(--orange)}.v4{color:var(--pink)}
+
+    /* ── Gender pills ── */
+    .pills{display:flex;gap:6px;margin-bottom:10px}
+    .pill{flex:1;padding:10px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:.2s;font-size:12px;font-weight:600}
+    .pill:hover{border-color:var(--accent)}
+    .pill.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .pill .ic{font-size:20px;display:block;margin-bottom:2px}
+
+    /* ── Category grid ── */
+    .catgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;margin-bottom:10px}
+    .catbtn{padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;font-size:11px;transition:.15s;text-align:left}
+    .catbtn:hover{border-color:var(--accent)}
+    .catbtn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .catbtn .ic{margin-right:3px}
+
+    /* ── Color swatches ── */
+    .swatches{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+    .sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s;position:relative}
+    .sw:hover{transform:scale(1.15)}
+    .sw.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+    .sw.multi{background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red)!important}
+
+    /* ── Size chips ── */
+    .szgrid{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+    .sz{padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:20px;cursor:pointer;font-size:11px;font-weight:500;transition:.15s}
+    .sz:hover{border-color:var(--accent)}
+    .sz.on{background:var(--accent);color:#000;border-color:var(--accent)}
+
+    /* ── Condition chips ── */
+    .condgrid{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+    .cond{padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:20px;cursor:pointer;font-size:11px;transition:.15s}
+    .cond:hover{border-color:var(--accent)}
+    .cond.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+    /* ── Price range ── */
+    .price-row{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+    .price-row input{width:80px;text-align:center}
+    .price-row span{color:var(--text3);font-size:11px}
+
+    /* ── Brand search ── */
+    .brand-search{position:relative;margin-bottom:4px}
+    .brand-results{position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);max-height:160px;overflow-y:auto;z-index:10;display:none}
+    .brand-results.show{display:block}
+    .brand-opt{padding:6px 10px;cursor:pointer;font-size:12px;transition:.1s}
+    .brand-opt:hover{background:var(--bg4);color:var(--accent)}
+    .brand-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+    .brand-tag{display:flex;align-items:center;gap:4px;padding:3px 8px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:20px;font-size:11px;color:var(--accent)}
+    .brand-tag .x{cursor:pointer;font-weight:700}
+
+    /* ── Query cards ── */
+    .qcard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px;transition:.15s}
+    .qcard:hover{border-color:var(--border2)}
+    .qcard .qh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+    .qcard .qt{font-weight:700;font-size:13px}
+    .qcard .qf{display:flex;flex-wrap:wrap;gap:3px}
+
+    /* ── Feed items (v3 modern card) ── */
+    .item{display:grid;grid-template-columns:100px 1fr auto;gap:14px;align-items:stretch;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px;transition:.2s;position:relative}
+    .item:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(34,211,167,.06)}
+    .item img{width:100px;height:100px;border-radius:8px;object-fit:cover;background:var(--bg4);cursor:pointer}
+    .item .t{font-weight:700;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+    .item .t:hover{color:var(--accent)}
+    .item .desc{font-size:11px;color:var(--text3);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4}
+    .item .m{font-size:10px;color:var(--text3);margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .item .m b{color:var(--text2)}
+    .item .right{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;min-width:80px}
+    .item .p{font-size:22px;font-weight:800;color:var(--accent);white-space:nowrap}
+    .item .p .old{font-size:10px;color:var(--text3);text-decoration:line-through;font-weight:400;display:block}
+    .item .actions{display:flex;gap:4px;margin-top:6px}
+    .item .abtn{padding:4px 10px;border-radius:var(--rs);font-size:10px;font-weight:700;cursor:pointer;border:none;transition:.15s;font-family:inherit}
+    .item .abtn:hover{transform:scale(1.04)}
+    .buy-btn{background:var(--accent);color:#000}
+    .open-btn{background:var(--bg4);color:var(--text2);border:1px solid var(--border)!important}
+    @keyframes si{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+    .item{animation:si .25s ease}
+    .new-badge{display:inline-block;padding:1px 6px;background:var(--accent);color:#000;border-radius:4px;font-size:9px;font-weight:700;margin-left:5px;animation:pulse 1.5s 3}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .deal-badge{display:inline-flex;align-items:center;gap:2px;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;margin-left:5px}
+    .deal-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .deal-card:hover{border-color:var(--accent)}
+    .arb-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px}
+    .arb-card .profit{font-size:18px;font-weight:800;color:var(--accent)}
+    .fav-btn{cursor:pointer;font-size:16px;transition:.15s;user-select:none}
+    .fav-btn:hover{transform:scale(1.3)}
+
+    /* ── Sessions / Sidebar right ── */
+    .sess{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;padding:4px 0;font-size:10px}
+    .bar{height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
+    .barf{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--blue));transition:width .5s}
+
+    .notif{padding:5px 7px;border-left:2px solid var(--accent);background:var(--bg);border-radius:0 var(--rs) var(--rs) 0;margin-bottom:3px;font-size:10px}
+    .notif .nt{font-weight:600}.notif .nd{color:var(--text3);font-size:9px}
+
+    .empty{text-align:center;padding:40px 16px;color:var(--text3)}
+    .empty .eic{font-size:32px;margin-bottom:8px;opacity:.4}
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">VINTED SNIPER</div>
+  <div class="ri">
+    <button id="botStart" class="bot-btn off" onclick="startBotAction()" title="Lancer le bot">
+      <span>▶</span> <span>Lancer</span>
+    </button>
+    <button id="botStop" class="bot-btn on" onclick="stopBotAction()" style="display:none" title="Arreter le bot">
+      <span>⏹</span> <span>Arreter</span>
+    </button>
+    <span><span class="dot off" id="dot"></span><span id="cs">...</span></span>
+    <span id="up"></span>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('feed')">📡 Feed</div>
+  <div class="tab" onclick="switchTab('search')">🔍 Recherches</div>
+  <div class="tab" onclick="switchTab('deals')">💎 Deals</div>
+  <div class="tab" onclick="switchTab('autobuy')">🤖 Autobuy</div>
+  <div class="tab" onclick="switchTab('monitor')">👁 Monitoring</div>
+  <div class="tab" onclick="switchTab('stats')">📊 Stats</div>
+</div>
+
+<!-- ══════════ PAGE: FEED ══════════ -->
+<div class="page active" id="p-feed">
+  <div class="stats">
+    <div class="st"><div class="v v1" id="sI">0</div><div class="l">Articles</div></div>
+    <div class="st"><div class="v v2" id="sN">0</div><div class="l">Nouveaux</div></div>
+    <div class="st"><div class="v v3" id="sS">0</div><div class="l">Sessions</div></div>
+    <div class="st"><div class="v v4" id="sNt">0</div><div class="l">Deals</div></div>
+  </div>
+  <div class="grid3">
+    <div class="pan">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="sec-t" style="margin:0">📡 Feed en direct <span id="fc" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)"></span></div>
+        <input id="feedFilter" placeholder="Filtrer..." style="width:180px;padding:5px 8px" oninput="renderFeed()">
+      </div>
+      <div id="feedEmpty" class="empty"><div class="eic">📡</div><div style="font-size:13px;font-weight:600">En attente d'articles...</div></div>
+      <div id="feed"></div>
+    </div>
+    <div class="pan-r">
+      <div class="sec"><div class="sec-t">🔗 Sessions</div><div id="seL"></div></div>
+      <div class="sec"><div class="sec-t">📊 Autobuy</div><div id="abS" style="font-size:11px;color:var(--text2)">—</div></div>
+      <div class="sec">
+        <div class="sec-t">🎯 Filtres actifs</div>
+        <div id="activeFilters" style="font-size:11px;color:var(--text3)">Aucun filtre</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE: SEARCH BUILDER ══════════ -->
+<div class="page" id="p-search">
+  <div class="grid2">
+    <div class="pan-side" id="searchBuilder">
+      <div class="sec-t" style="font-size:12px;margin-bottom:12px">✨ Nouvelle recherche</div>
+
+      <!-- Keywords -->
+      <div class="sec">
+        <div class="sec-t">🔤 Mots-cles</div>
+        <input id="sq-text" placeholder="nike air max, yeezy 350...">
+      </div>
+
+      <!-- Gender -->
+      <div class="sec">
+        <div class="sec-t">👤 Genre</div>
+        <div class="pills" id="genderPills"></div>
+      </div>
+
+      <!-- Categories -->
+      <div class="sec">
+        <div class="sec-t">📂 Categorie</div>
+        <div class="catgrid" id="catGrid"></div>
+      </div>
+
+      <!-- Brands -->
+      <div class="sec">
+        <div class="sec-t">🏷 Marques</div>
+        <div class="brand-tags" id="brandTags"></div>
+        <div class="brand-search">
+          <input id="brandInput" placeholder="Rechercher une marque..." oninput="filterBrands()" onfocus="filterBrands()">
+          <div class="brand-results" id="brandResults"></div>
+        </div>
+      </div>
+
+      <!-- Sizes -->
+      <div class="sec">
+        <div class="sec-t">📏 Tailles</div>
+        <div class="szgrid" id="sizeGrid"></div>
+      </div>
+
+      <!-- Colors -->
+      <div class="sec">
+        <div class="sec-t">🎨 Couleurs</div>
+        <div class="swatches" id="colorSwatches"></div>
+      </div>
+
+      <!-- Conditions -->
+      <div class="sec">
+        <div class="sec-t">📦 Etat</div>
+        <div class="condgrid" id="condGrid"></div>
+      </div>
+
+      <!-- Price -->
+      <div class="sec">
+        <div class="sec-t">💰 Prix</div>
+        <div class="price-row">
+          <input id="sq-pmin" type="number" placeholder="Min">
+          <span>→</span>
+          <input id="sq-pmax" type="number" placeholder="Max">
+          <span>€</span>
+        </div>
+      </div>
+
+      <!-- Sort -->
+      <div class="sec">
+        <div class="sec-t">📊 Tri</div>
+        <select id="sq-sort"></select>
+      </div>
+
+      <!-- Autobuy toggle for this filter -->
+      <div style="margin-top:12px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rs)">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px">
+          <input type="checkbox" id="sq-autobuy" style="width:auto;accent-color:var(--accent)">
+          <span>🤖 <b>Autobuy</b> — acheter automatiquement les articles correspondants</span>
+        </label>
+        <div id="sq-autobuy-opts" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div><label style="font-size:10px;color:var(--text3)">Min note vendeur</label><input type="number" id="sq-ab-rating" value="4" step="0.1" min="0" max="5"></div>
+            <div><label style="font-size:10px;color:var(--text3)">Min avis vendeur</label><input type="number" id="sq-ab-reviews" value="10" min="0"></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-a btn-full" style="padding:10px;font-size:13px;margin-top:8px" onclick="addSearchQuery()">+ Ajouter ce filtre</button>
+    </div>
+
+    <!-- Active queries -->
+    <div class="pan">
+      <div class="sec-t" style="margin-bottom:12px">📋 Recherches actives <span id="qCount" style="color:var(--text3);font-weight:400"></span></div>
+      <div id="queryCards"></div>
+      <div id="queryEmpty" class="empty">
+        <div class="eic">🔍</div>
+        <div style="font-size:14px;font-weight:600">Aucun filtre configure</div>
+        <div style="font-size:11px;margin-top:6px;color:var(--text3);line-height:1.6">
+          1. Configure tes filtres a gauche (genre, marque, taille, prix...)<br>
+          2. Clique <b>"+ Ajouter ce filtre"</b> (tu peux en ajouter plusieurs)<br>
+          3. Puis clique <b>"▶ Lancer le bot"</b> en haut a droite
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE: AUTOBUY ══════════ -->
+<div class="page" id="p-autobuy">
+  <div style="padding:20px;max-width:900px">
+
+    <!-- Vinted Account Connection -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:20px">
+      <div class="sec-t" style="margin-bottom:10px">🔐 Connexion Vinted</div>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.5">
+        L'autobuy necessite une connexion a ton compte Vinted. Le bot utilise tes identifiants pour se connecter via un navigateur Playwright, extraire les cookies d'authentification, puis effectuer les achats via l'API.<br>
+        <b style="color:var(--orange)">⚠️ Le moyen de paiement doit etre deja configure sur ton compte Vinted.</b> Le bot ne saisit jamais tes donnees bancaires.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div>
+          <label style="font-size:10px;color:var(--text3)">Email Vinted</label>
+          <input type="email" id="vinted-email" placeholder="ton@email.com" autocomplete="off">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text3)">Mot de passe</label>
+          <input type="password" id="vinted-password" placeholder="••••••••" autocomplete="off">
+        </div>
+        <button class="btn btn-a" onclick="saveVintedCredentials()" style="height:33px">Connecter</button>
+      </div>
+      <div id="vintedAuthStatus" style="font-size:11px;margin-top:8px"></div>
+    </div>
+
+    <!-- Autobuy Master Toggle -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div class="sec-t" style="font-size:14px;margin:0">🤖 Regles d'achat automatique</div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px">
+        <input type="checkbox" id="autobuy-enabled" style="width:auto" onchange="toggleAutobuy(this.checked)">
+        <span>Activer l'autobuy</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--orange)">
+        <input type="checkbox" id="autobuy-dryrun" checked style="width:auto" onchange="toggleDryRun(this.checked)">
+        <span>🧪 Dry Run (simule sans acheter)</span>
+      </label>
+    </div>
+
+    <!-- Autobuy Settings -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:10px">
+        <label style="font-size:10px;color:var(--text3)">Max achats/jour</label>
+        <input type="number" id="ab-max-daily" value="5" min="1" max="50" onchange="updateAutobuyConfig()">
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:10px">
+        <label style="font-size:10px;color:var(--text3)">Max depense/jour (€)</label>
+        <input type="number" id="ab-max-spend" value="200" min="1" onchange="updateAutobuyConfig()">
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:10px">
+        <label style="font-size:10px;color:var(--text3)">Cooldown (sec)</label>
+        <input type="number" id="ab-cooldown" value="60" min="5" onchange="updateAutobuyConfig()">
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:10px">
+        <label style="font-size:10px;color:var(--text3)">Mode</label>
+        <select id="ab-mode" onchange="updateAutobuyConfig()">
+          <option value="instant">Achat instant</option>
+          <option value="offer">Faire une offre</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Rules -->
+    <div id="ruleCards"></div>
+    <button class="btn btn-a" style="margin-top:12px" onclick="showAddRule()">+ Nouvelle regle</button>
+
+    <!-- Stats -->
+    <div style="margin-top:24px;padding:16px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">
+      <div class="sec-t">📊 Historique autobuy</div>
+      <div id="abStats2" style="font-size:12px;color:var(--text2)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE: DEALS ══════════ -->
+<div class="page" id="p-deals">
+  <div style="display:grid;grid-template-columns:280px 1fr;min-height:calc(100vh - 92px)">
+    <!-- Deal Config Sidebar -->
+    <div class="pan-side">
+      <div class="sec">
+        <div class="sec-t">⚙️ Seuils de deals</div>
+        <p style="font-size:10px;color:var(--text3);margin-bottom:10px">Configure les paliers de reduction par rapport au prix moyen du marche</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:#22c55e;color:#000;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap">🔥 STEAL</span>
+            <span style="font-size:11px;color:var(--text2)">≥</span>
+            <input type="number" id="thresh-steal" value="40" style="width:55px;text-align:center" min="0" max="99"> <span style="font-size:11px;color:var(--text3)">% sous le prix moyen</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:var(--accent);color:#000;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap">💎 DEAL</span>
+            <span style="font-size:11px;color:var(--text2)">≥</span>
+            <input type="number" id="thresh-deal" value="25" style="width:55px;text-align:center" min="0" max="99"> <span style="font-size:11px;color:var(--text3)">%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:var(--blue);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap">👍 BON</span>
+            <span style="font-size:11px;color:var(--text2)">≥</span>
+            <input type="number" id="thresh-good" value="15" style="width:55px;text-align:center" min="0" max="99"> <span style="font-size:11px;color:var(--text3)">%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:var(--text3);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap">😐 NORMAL</span>
+            <span style="font-size:11px;color:var(--text2)">&lt;</span>
+            <span style="font-size:11px;color:var(--text3)">15%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:var(--danger);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap">📈 CHER</span>
+            <span style="font-size:11px;color:var(--text2)">Au dessus du prix moyen</span>
+          </div>
+        </div>
+        <button class="btn btn-a btn-full" style="margin-top:10px" onclick="saveDealThresholds()">Sauvegarder les seuils</button>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">📊 Actions auto sur deals</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:6px;cursor:pointer">
+          <input type="checkbox" id="deal-notify-steal" checked style="width:auto"> Notifier sur STEAL
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:6px;cursor:pointer">
+          <input type="checkbox" id="deal-notify-deal" checked style="width:auto"> Notifier sur DEAL
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:6px;cursor:pointer">
+          <input type="checkbox" id="deal-autobuy-steal" style="width:auto"> Autobuy sur STEAL
+        </label>
+        <p style="font-size:9px;color:var(--text3);margin-top:4px">L'autobuy STEAL achete immediatement si le prix est ≥ seuil steal ET les regles autobuy sont satisfaites</p>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">📈 Stats marche</div>
+        <div class="stats" style="padding:0;grid-template-columns:1fr 1fr;gap:6px">
+          <div class="st" style="padding:8px"><div class="v v1" style="font-size:18px" id="dScored">0</div><div class="l">Analyses</div></div>
+          <div class="st" style="padding:8px"><div class="v v2" style="font-size:18px" id="dFound">0</div><div class="l">Deals</div></div>
+          <div class="st" style="padding:8px"><div class="v v3" style="font-size:18px" id="dAvg">—</div><div class="l">Score moy.</div></div>
+          <div class="st" style="padding:8px"><div class="v v4" style="font-size:18px" id="dSegs">0</div><div class="l">Segments</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deal Results -->
+    <div class="pan">
+      <div class="sec-t" style="font-size:14px;margin-bottom:8px">🔥 Articles classes par deal score</div>
+      <p style="font-size:10px;color:var(--text3);margin-bottom:12px">Compares au prix moyen du marche Vinted pour la meme marque/categorie/taille</p>
+
+      <!-- Filter bar -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-a deal-filter active" onclick="filterDeals('all',this)" style="font-size:10px;padding:4px 10px">Tous</button>
+        <button class="btn btn-g deal-filter" onclick="filterDeals('steal',this)" style="font-size:10px;padding:4px 10px">🔥 Steal</button>
+        <button class="btn btn-g deal-filter" onclick="filterDeals('deal',this)" style="font-size:10px;padding:4px 10px">💎 Deal</button>
+        <button class="btn btn-g deal-filter" onclick="filterDeals('good',this)" style="font-size:10px;padding:4px 10px">👍 Bon</button>
+        <button class="btn btn-g deal-filter" onclick="filterDeals('normal',this)" style="font-size:10px;padding:4px 10px">😐 Normal</button>
+        <button class="btn btn-g deal-filter" onclick="filterDeals('expensive',this)" style="font-size:10px;padding:4px 10px">📈 Cher</button>
+      </div>
+
+      <div id="topDeals"></div>
+
+      <div style="margin-top:24px">
+        <div class="sec-t" style="font-size:14px;margin-bottom:12px">🔄 Arbitrage multi-pays <span id="arbCount" style="font-weight:400;color:var(--text3)"></span></div>
+        <div id="arbList"></div>
+      </div>
+      <div style="margin-top:24px">
+        <div class="sec-t" style="font-size:14px;margin-bottom:12px">⭐ Favoris</div>
+        <div id="favList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE: STATS ══════════ -->
+<div class="page" id="p-stats">
+  <div style="padding:20px;max-width:900px">
+    <div class="sec-t" style="font-size:14px;margin-bottom:16px">📊 Statistiques detaillees</div>
+    <div class="stats" style="padding:0;margin-bottom:20px">
+      <div class="st"><div class="v v1" id="xItems">0</div><div class="l">Total articles</div></div>
+      <div class="st"><div class="v v2" id="xSellers">0</div><div class="l">Vendeurs vus</div></div>
+      <div class="st"><div class="v v3" id="xSegs">0</div><div class="l">Segments marche</div></div>
+      <div class="st"><div class="v v4" id="xMem">0</div><div class="l">Memoire (MB)</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px">
+        <div class="sec-t">🔗 Sessions</div><div id="xSess" style="font-size:11px;color:var(--text2)"></div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px">
+        <div class="sec-t">🔔 Notifications</div><div id="xNotifs" style="font-size:11px;color:var(--text2)"></div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px">
+        <div class="sec-t">🤖 Autobuy</div><div id="xAB" style="font-size:11px;color:var(--text2)"></div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px">
+        <div class="sec-t">🌐 Pays actifs</div><div id="xCountries" style="font-size:11px;color:var(--text2)"></div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn btn-g" onclick="exportData('json')">📥 Export JSON</button>
+      <button class="btn btn-g" style="margin-left:6px" onclick="exportData('csv')">📥 Export CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE: MONITORING ══════════ -->
+<div class="page" id="p-monitor">
+  <div style="padding:20px;max-width:800px">
+    <div class="sec">
+      <div class="sec-t" style="font-size:14px">👤 Vendeurs suivis</div>
+      <div id="sellerList"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input id="nSeller" placeholder="ID ou username du vendeur" style="flex:1">
+        <button class="btn btn-a" onclick="addSeller()">+ Suivre</button>
+      </div>
+    </div>
+    <div class="sec" style="margin-top:24px">
+      <div class="sec-t" style="font-size:14px">📌 Watchlist (alertes baisse de prix)</div>
+      <div id="watchList"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input id="nWatch" placeholder="ID de l'article Vinted" type="number" style="flex:1">
+        <button class="btn btn-a" onclick="addWatch()">+ Surveiller</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════ STATE ══════════
+let items = [], cat = {}, newCount = 0, connected = false, botRunning = false;
+let favs = new Set();
+let sel = { gender: null, cats: [], brands: [], sizes: [], colors: [], conds: [] };
+
+// ══════════ SOCKET ══════════
+const socket = io({ reconnection: true, reconnectionDelay: 1000 });
+socket.on('connect', () => { connected=true; document.getElementById('dot').className='dot on'; document.getElementById('cs').textContent='Connecte'; });
+socket.on('disconnect', () => { connected=false; document.getElementById('dot').className='dot off'; document.getElementById('cs').textContent='Deconnecte'; });
+socket.on('stats', d => { updateStats(d); updateSessions(d.sessions); updateAB(d.autobuy); updateNotifs(); });
+socket.on('items:backlog', b => { if(b?.length){items=b;renderFeed()} });
+socket.on('item:new', it => { items.unshift(it); if(items.length>200)items.pop(); newCount++; renderFeed(); });
+socket.on('queries:updated', q => { renderQueryCards(q); renderActiveFilters(q); });
+// Guard: ignore bot:status events for 3s after user clicks start/stop
+// to prevent race condition where a stale server event overrides the button state
+let botBtnLocked = false;
+socket.on('bot:status', s => { if(!botBtnLocked){ botRunning = s.running; updateBotBtns(); } });
+
+// Fallback polling
+setInterval(async()=>{
+  try{
+    const s=await api('GET','/stats');
+    updateStats(s);updateSessions(s.sessions);updateAB(s.autobuy);
+    if(!connected){const it=await api('GET','/items');if(it?.length>items.length){items=it;renderFeed()}}
+  }catch{}
+}, 3000);
+
+// ══════════ TABS ══════════
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',t.textContent.toLowerCase().includes(name.slice(0,4))));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='p-'+name));
+  // Load tab-specific data
+  if(name==='deals'){loadDeals();loadFavorites()}
+  if(name==='stats'){fetch('/api/stats').then(r=>r.json()).then(updateFullStats).catch(()=>{})}
+}
+
+// ══════════ API ══════════
+async function api(m,p,b){const o={method:m,headers:{'Content-Type':'application/json'}};if(b)o.body=JSON.stringify(b);return(await fetch('/api'+p,o)).json()}
+
+// ══════════ INIT CATALOG ══════════
+async function initCatalog(){
+  cat = await api('GET','/catalog');
+  renderGenderPills();
+  renderSortOptions();
+  renderColorSwatches();
+  renderConditions();
+  renderSizes('clothing');
+}
+
+function renderGenderPills(){
+  document.getElementById('genderPills').innerHTML = (cat.genders||[]).map(g=>
+    `<div class="pill" onclick="selectGender(${g.id})" id="gp-${g.id}"><span class="ic">${g.icon}</span>${g.label}</div>`
+  ).join('');
+}
+
+function selectGender(id){
+  sel.gender = sel.gender===id ? null : id;
+  sel.cats = [];
+  document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('on',p.id==='gp-'+id&&sel.gender===id));
+  renderCategoryGrid();
+}
+
+function renderCategoryGrid(){
+  const cats = sel.gender ? (cat.categories[sel.gender]||[]) : [];
+  let html='';
+  cats.forEach(c=>{
+    html+=`<div class="catbtn ${sel.cats.includes(c.id)?'on':''}" onclick="toggleCat(${c.id})"><span class="ic">${c.icon||''}</span>${c.label}</div>`;
+    if(c.children && sel.cats.includes(c.id)){
+      c.children.forEach(sc=>{
+        html+=`<div class="catbtn ${sel.cats.includes(sc.id)?'on':''}" onclick="toggleCat(${sc.id})" style="padding-left:20px;font-size:10px">${sc.label}</div>`;
+      });
+    }
+  });
+  document.getElementById('catGrid').innerHTML=html||'<div style="color:var(--text3);font-size:11px;grid-column:1/-1">Selectionne un genre d\'abord</div>';
+}
+
+function toggleCat(id){
+  const i=sel.cats.indexOf(id);i>=0?sel.cats.splice(i,1):sel.cats.push(id);
+  renderCategoryGrid();
+  // Auto-update sizes based on category
+  const shoeCats=[16,1864,17,1042,1043,1044,1045,1865,2063,2064,2065,2066,2067,2068,1202];
+  const jeansCats=[9,2055];
+  if(sel.cats.some(c=>shoeCats.includes(c))) renderSizes(sel.gender===5?'shoes_men':'shoes_women');
+  else if(sel.cats.some(c=>jeansCats.includes(c))) renderSizes('jeans');
+  else renderSizes('clothing');
+}
+
+function renderColorSwatches(){
+  document.getElementById('colorSwatches').innerHTML=(cat.colors||[]).map(c=>{
+    const bg=c.hex.startsWith('linear')?c.hex:c.hex;
+    const style=c.hex.startsWith('linear')?`background:${c.hex}`:`background:${c.hex}`;
+    const border=c.label==='Blanc'?';border:1px solid var(--border2)':'';
+    return `<div class="sw ${sel.colors.includes(c.id)?'on':''} ${c.id===2?'multi':''}" style="${style}${border}" title="${c.label}" onclick="toggleArr('colors',${c.id});renderColorSwatches()"></div>`;
+  }).join('');
+}
+
+function renderConditions(){
+  document.getElementById('condGrid').innerHTML=(cat.conditions||[]).map(c=>
+    `<div class="cond ${sel.conds.includes(c.id)?'on':''}" onclick="toggleArr('conds',${c.id});renderConditions()">${c.icon} ${c.short}</div>`
+  ).join('');
+}
+
+function renderSizes(group){
+  const sizes=cat.sizes?.[group]||cat.sizes?.clothing||[];
+  document.getElementById('sizeGrid').innerHTML=sizes.map(s=>
+    `<div class="sz ${sel.sizes.includes(s.id)?'on':''}" onclick="toggleArr('sizes',${s.id});renderSizes('${group}')">${s.label}</div>`
+  ).join('');
+}
+
+function renderSortOptions(){
+  document.getElementById('sq-sort').innerHTML=(cat.sortOptions||[]).map(s=>
+    `<option value="${s.id}">${s.label}</option>`
+  ).join('');
+}
+
+// Brand search
+function filterBrands(){
+  const q=document.getElementById('brandInput').value.toLowerCase();
+  const res=document.getElementById('brandResults');
+  if(!q){res.classList.remove('show');return}
+  const matches=(cat.brands||[]).filter(b=>b.label.toLowerCase().includes(q)&&!sel.brands.find(x=>x.id===b.id)).slice(0,12);
+  res.innerHTML=matches.map(b=>`<div class="brand-opt" onmousedown="addBrand(${b.id},'${esc(b.label)}')">${b.label}</div>`).join('');
+  res.classList.toggle('show',matches.length>0);
+}
+function addBrand(id,label){
+  if(!sel.brands.find(b=>b.id===id))sel.brands.push({id,label});
+  document.getElementById('brandInput').value='';
+  document.getElementById('brandResults').classList.remove('show');
+  renderBrandTags();
+}
+function removeBrand(id){
+  sel.brands=sel.brands.filter(b=>b.id!==id);
+  renderBrandTags();
+}
+function renderBrandTags(){
+  document.getElementById('brandTags').innerHTML=sel.brands.map(b=>
+    `<div class="brand-tag">${b.label} <span class="x" onclick="removeBrand(${b.id})">✕</span></div>`
+  ).join('');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.brand-search'))document.getElementById('brandResults').classList.remove('show')});
+
+function toggleArr(key,id){const a=sel[key];const i=a.indexOf(id);i>=0?a.splice(i,1):a.push(id)}
+
+// ══════════ ADD SEARCH ══════════
+async function addSearchQuery(){
+  const text=document.getElementById('sq-text').value.trim();
+  const pmin=document.getElementById('sq-pmin').value;
+  const pmax=document.getElementById('sq-pmax').value;
+  const order=document.getElementById('sq-sort').value;
+  if(!text&&!sel.gender&&sel.brands.length===0&&sel.cats.length===0){alert('Ajoute au moins un mot-cle, un genre ou une marque');return}
+
+  const query={
+    text: text||undefined,
+    catalogIds: sel.cats.length?[...sel.cats]:sel.gender?[sel.gender]:undefined,
+    brandIds: sel.brands.length?sel.brands.map(b=>b.id):undefined,
+    sizeIds: sel.sizes.length?[...sel.sizes]:undefined,
+    colorIds: sel.colors.length?[...sel.colors]:undefined,
+    statusIds: sel.conds.length?[...sel.conds]:undefined,
+    priceFrom: pmin?+pmin:undefined,
+    priceTo: pmax?+pmax:undefined,
+    order: order||'newest_first',
+    // Store display labels for the UI
+    _labels:{
+      gender: sel.gender?cat.genders.find(g=>g.id===sel.gender)?.label:null,
+      brands: sel.brands.map(b=>b.label),
+      cats: sel.cats.map(id=>{
+        for(const g of Object.values(cat.categories)){
+          for(const c of g){
+            if(c.id===id)return c.label;
+            if(c.children){for(const sc of c.children)if(sc.id===id)return sc.label}
+          }
+        }return id;
+      }),
+      sizes: sel.sizes.map(id=>{for(const g of Object.values(cat.sizes)){const f=g.find(s=>s.id===id);if(f)return f.label}return id}),
+      colors: sel.colors.map(id=>cat.colors.find(c=>c.id===id)?.label||id),
+      conds: sel.conds.map(id=>cat.conditions.find(c=>c.id===id)?.short||id),
+    }
+  };
+
+  // Autobuy: if checkbox is checked, also create an autobuy rule from this filter
+  const abCheck=document.getElementById('sq-autobuy');
+  if(abCheck&&abCheck.checked){
+    query._autobuy={
+      enabled:true,
+      minSellerRating:parseFloat(document.getElementById('sq-ab-rating')?.value)||4,
+      minSellerReviews:parseInt(document.getElementById('sq-ab-reviews')?.value)||10,
+    };
+    // Also POST a matching autobuy rule
+    const ruleName=(text||query._labels?.brands?.[0]||'Filtre')+(pmax?' <'+pmax+'€':'');
+    await api('POST','/autobuy/rules',{
+      name:ruleName,
+      enabled:true,
+      keywords:text?text.split(/[,;]+/).map(s=>s.trim()).filter(Boolean):[],
+      brands:query._labels?.brands||[],
+      sizes:query._labels?.sizes||[],
+      conditions:sel.conds.map(id=>cat.conditions.find(c=>c.id===id)?.value||id),
+      maxPrice:pmax?+pmax:undefined,
+      minPrice:pmin?+pmin:undefined,
+      minSellerRating:parseFloat(document.getElementById('sq-ab-rating')?.value)||4,
+      minSellerReviews:parseInt(document.getElementById('sq-ab-reviews')?.value)||10,
+    });
+  }
+
+  await api('POST','/queries',query);
+  // Reset builder
+  sel={gender:null,cats:[],brands:[],sizes:[],colors:[],conds:[]};
+  document.getElementById('sq-text').value='';
+  document.getElementById('sq-pmin').value='';
+  document.getElementById('sq-pmax').value='';
+  if(abCheck)abCheck.checked=false;
+  document.getElementById('sq-autobuy-opts').style.display='none';
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
+  renderCategoryGrid();renderBrandTags();renderColorSwatches();renderConditions();renderSizes('clothing');
+  loadQueries();
+  // Stay on search page so user can add more filters
+  // Flash confirmation
+  const btn=document.querySelector('[onclick="addSearchQuery()"]');
+  const orig=btn.textContent;
+  btn.textContent=abCheck?.checked?'✅ Filtre + Autobuy ajoutes !':'✅ Filtre ajoute !';
+  btn.style.background='var(--success)';
+  setTimeout(()=>{btn.textContent=orig;btn.style.background=''},1500);
+}
+
+// ══════════ QUERY CARDS ══════════
+async function loadQueries(){
+  const q=await api('GET','/queries');
+  renderQueryCards(q);
+  renderActiveFilters(q);
+}
+function renderQueryCards(queries){
+  const el=document.getElementById('queryCards');
+  const empty=document.getElementById('queryEmpty');
+  empty.style.display=(queries||[]).length?'none':'block';
+  document.getElementById('qCount').textContent=queries?.length?`(${queries.length})`:'';
+  el.innerHTML=(queries||[]).map((q,i)=>{
+    const lb=q._labels||{};
+    const tags=[];
+    if(lb.gender)tags.push(`<span class="tag tp">${lb.gender}</span>`);
+    (lb.cats||[]).forEach(c=>tags.push(`<span class="tag tb">${c}</span>`));
+    (lb.brands||[]).forEach(b=>tags.push(`<span class="tag to">${b}</span>`));
+    (lb.sizes||[]).forEach(s=>tags.push(`<span class="tag tg">${s}</span>`));
+    (lb.colors||[]).forEach(c=>tags.push(`<span class="tag" style="background:var(--bg4);color:var(--text2)">${c}</span>`));
+    (lb.conds||[]).forEach(c=>tags.push(`<span class="tag" style="background:rgba(168,85,247,.1);color:var(--purple)">${c}</span>`));
+    if(q.priceFrom||q.priceTo)tags.push(`<span class="tag tg">${q.priceFrom||0}→${q.priceTo||'∞'}€</span>`);
+    return `<div class="qcard">
+      <div class="qh">
+        <span class="qt">${esc(q.text||'Recherche '+(i+1))}</span>
+        <span class="btn-d" onclick="removeQuery(${i})">✕</span>
+      </div>
+      <div class="qf">${tags.join('')}</div>
+    </div>`;
+  }).join('');
+}
+function renderActiveFilters(queries){
+  const el=document.getElementById('activeFilters');
+  if(!queries||!queries.length){
+    el.innerHTML='<div style="color:var(--text3);font-size:11px">Aucun filtre<br><a href="#" onclick="switchTab(\'search\');return false" style="color:var(--accent)">+ Ajouter</a></div>';
+    return;
+  }
+  el.innerHTML=queries.map((q,i)=>{
+    const lb=q._labels||{};
+    const parts=[];
+    if(q.text)parts.push('<b>'+esc(q.text)+'</b>');
+    if(lb.gender)parts.push(lb.gender);
+    if(lb.brands?.length)parts.push(lb.brands.join(', '));
+    if(lb.sizes?.length)parts.push('T.'+lb.sizes.join('/'));
+    if(q.priceTo)parts.push('max '+q.priceTo+'€');
+    if(q.priceFrom)parts.push('min '+q.priceFrom+'€');
+    if(lb.conds?.length)parts.push(lb.conds.join(', '));
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:11px;color:var(--text2);line-height:1.4">${parts.join(' · ')}</div>
+      <span class="btn-d" style="font-size:10px;cursor:pointer" onclick="removeQuery(${i})" title="Supprimer">✕</span>
+    </div>`;
+  }).join('')+'<div style="margin-top:6px"><a href="#" onclick="switchTab(\'search\');return false" style="color:var(--accent);font-size:11px;text-decoration:none">+ Ajouter un filtre</a></div>';
+}
+async function removeQuery(i){await api('DELETE','/queries/'+i);loadQueries()}
+
+// ══════════ FEED ══════════
+function renderFeed(){
+  const f=document.getElementById('feed'),e=document.getElementById('feedEmpty'),fc=document.getElementById('fc');
+  const filter=(document.getElementById('feedFilter')?.value||'').toLowerCase();
+  const shown=items.filter(it=>!filter||it.title?.toLowerCase().includes(filter)||it.brand?.toLowerCase().includes(filter));
+  e.style.display=shown.length?'none':'block';
+  fc.textContent=items.length?`(${items.length})`:' ';
+  document.getElementById('sI').textContent=items.length;
+  document.getElementById('sN').textContent=newCount;
+  f.innerHTML=shown.slice(0,80).map((it,idx)=>{
+    const isNew=idx<3&&Date.now()-new Date(it.scrapedAt||it.createdAt).getTime()<30000;
+    const dealBadge=it.dealScore>=70?`<span class="deal-badge" style="background:${it.dealColor}22;color:${it.dealColor}">${it.dealLabel} ${it.priceVsMarket||''}</span>`
+      :it.dealScore?`<span class="deal-badge" style="background:var(--bg4);color:var(--text3)">${it.dealLabel||''}</span>`:'';
+    const imgErr="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%231c2333%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2258%22 text-anchor=%22middle%22 fill=%22%23334155%22 font-size=%2228%22>📦</text></svg>'";
+    return `<div class="item">
+      <img src="${it.photo||it.photos?.[0]||''}" onerror="${imgErr}" onclick="window.open('${safeUrl(it.url)}','_blank')" title="Voir sur Vinted" />
+      <div>
+        <div class="t" onclick="window.open('${safeUrl(it.url)}','_blank')">${esc(it.title)}${isNew?'<span class="new-badge">NEW</span>':''}${dealBadge}</div>
+        ${it.description?'<div class="desc">'+esc(it.description)+'</div>':''}
+        <div class="m">
+          ${it.brand?'<b>'+esc(it.brand)+'</b>':''}
+          ${it.size?'<span>📏 '+esc(it.size)+'</span>':''}
+          ${it.condition?'<span>'+esc(it.condition)+'</span>':''}
+          ${it.seller?.login?'<span>👤 '+esc(it.seller.login)+(it.seller.rating?' ('+it.seller.rating+'⭐)':'')+'</span>':''}
+          ${it.marketMedian?'<span style="color:var(--text3)">Moy. '+it.marketMedian+'€</span>':''}
+          <span>${timeAgo(it.scrapedAt||it.createdAt)}</span>
+        </div>
+      </div>
+      <div class="right">
+        <div>
+          <div class="p">${it.price}€</div>
+          ${it.previousPrice?'<div class="p"><span class="old">'+it.previousPrice+'€</span></div>':''}
+        </div>
+        <div class="actions">
+          <button class="abtn buy-btn" onclick="event.stopPropagation();quickBuy('${safeUrl(it.url)}')" title="Acheter sur Vinted">🛒 Acheter</button>
+          <button class="abtn open-btn" onclick="event.stopPropagation();window.open('${safeUrl(it.url)}','_blank')" title="Ouvrir">↗</button>
+          <span class="fav-btn" onclick="event.stopPropagation();toggleFav(${it.id})">${favs.has(it.id)?'❤️':'🤍'}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════ AUTOBUY ══════════
+async function loadRules(){renderRuleCards(await api('GET','/autobuy/rules'))}
+function renderRuleCards(rules){
+  document.getElementById('ruleCards').innerHTML=(rules||[]).map(r=>
+    `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:700;font-size:14px">${esc(r.name)}</span>
+        <div style="display:flex;gap:6px">
+          <span class="tag ${r.enabled?'tg':'tr'}" style="cursor:pointer" onclick="api('PATCH','/autobuy/rules/${encodeURIComponent(r.name)}',{enabled:${!r.enabled}}).then(loadRules)">${r.enabled?'ON':'OFF'}</span>
+          <span class="btn-d" onclick="api('DELETE','/autobuy/rules/${encodeURIComponent(r.name)}').then(loadRules)">✕</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;font-size:10px">
+        ${(r.keywords||[]).map(k=>'<span class="tag tb">'+esc(k)+'</span>').join('')}
+        ${r.maxPrice?'<span class="tag tg">max '+r.maxPrice+'€</span>':''}
+        ${r.minPrice?'<span class="tag to">min '+r.minPrice+'€</span>':''}
+        ${(r.brands||[]).map(b=>'<span class="tag to">'+esc(b)+'</span>').join('')}
+        ${(r.sizes||[]).map(s=>'<span class="tag tp">T.'+esc(s)+'</span>').join('')}
+        ${(r.conditions||[]).map(c=>'<span class="tag" style="background:var(--bg4);color:var(--text2)">'+esc(c)+'</span>').join('')}
+        ${r.minSellerRating?'<span class="tag" style="background:var(--bg4);color:var(--text2)">⭐≥'+r.minSellerRating+'</span>':''}
+      </div>
+    </div>`
+  ).join('')||'<div class="empty"><div class="eic">🤖</div><div>Aucune regle autobuy</div></div>';
+}
+function showAddRule(){
+  const n=prompt('Nom de la regle:');if(!n)return;
+  const kw=prompt('Mots-cles (virgule):');
+  const maxP=prompt('Prix max (€):');
+  const minP=prompt('Prix min (€):');
+  const br=prompt('Marques (virgule, optionnel):');
+  const sz=prompt('Tailles (virgule, optionnel):');
+  const minR=prompt('Note vendeur min (ex: 4.0, optionnel):');
+  api('POST','/autobuy/rules',{
+    name:n,enabled:true,
+    keywords:kw?kw.split(',').map(s=>s.trim()):[],
+    maxPrice:maxP?+maxP:undefined,minPrice:minP?+minP:undefined,
+    brands:br?br.split(',').map(s=>s.trim()):undefined,
+    sizes:sz?sz.split(',').map(s=>s.trim()):undefined,
+    minSellerRating:minR?+minR:undefined,
+  }).then(loadRules);
+}
+
+// ══════════ MONITORING ══════════
+async function loadSellers(){
+  const list=await api('GET','/sellers');
+  document.getElementById('sellerList').innerHTML=list.map(s=>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:4px">
+      <span style="font-weight:600">👤 ${esc(s.name||s.id)}</span>
+      <span class="btn-d" onclick="api('DELETE','/sellers/${s.id||s.username}').then(loadSellers)">✕</span>
+    </div>`
+  ).join('')||'<div style="color:var(--text3);font-size:11px;padding:8px 0">Aucun vendeur suivi</div>';
+}
+async function addSeller(){const id=document.getElementById('nSeller').value.trim();if(!id)return;await api('POST','/sellers',{id,username:id,name:id});document.getElementById('nSeller').value='';loadSellers()}
+async function loadWatchlist(){
+  const list=await api('GET','/watchlist');
+  document.getElementById('watchList').innerHTML=list.map(id=>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:4px">
+      <span style="font-weight:600">📌 Article #${id}</span>
+      <span class="btn-d" onclick="api('DELETE','/watchlist/${id}').then(loadWatchlist)">✕</span>
+    </div>`
+  ).join('')||'<div style="color:var(--text3);font-size:11px;padding:8px 0">Aucun article surveille</div>';
+}
+async function addWatch(){const id=document.getElementById('nWatch').value.trim();if(!id)return;await api('POST','/watchlist',{itemId:+id});document.getElementById('nWatch').value='';loadWatchlist()}
+
+// ══════════ SIDEBAR ══════════
+function updateStats(s){
+  if(!s)return;
+  let se=0;for(const c in(s.sessions||{}))if(c!=='timestamp')se+=s.sessions[c]?.alive||0;
+  document.getElementById('sS').textContent=se;
+  document.getElementById('sNt').textContent=items.filter(i=>i.dealScore>=60).length;
+  const u=Math.floor(s.uptime||0),h=Math.floor(u/3600),m=Math.floor((u%3600)/60);
+  document.getElementById('up').textContent=h+'h'+String(m).padStart(2,'0');
+}
+function updateSessions(d){
+  let h='';
+  for(const[c,info]of Object.entries(d||{})){
+    if(c==='timestamp'||!info.sessions)continue;
+    h+=`<div style="font-size:9px;color:var(--text3);margin:5px 0 3px;text-transform:uppercase;letter-spacing:1px">${c} (${info.alive}/${info.total})</div>`;
+    info.sessions.forEach(s=>{
+      const p=Math.min(100,(s.requests/80)*100);
+      h+=`<div class="sess"><span class="tag ${s.alive?'tg':'tr'}" style="font-size:8px;padding:1px 4px">${s.alive?'●':'✕'}</span><div class="bar"><div class="barf" style="width:${p}%"></div></div><span style="font-size:9px;color:var(--text3)">${s.requests}r</span></div>`;
+    });
+  }
+  document.getElementById('seL').innerHTML=h||'<div style="color:var(--text3);font-size:10px">—</div>';
+}
+function updateAB(ab){
+  if(!ab)return;
+  const tag=ab.enabled?(ab.dryRun?'<span class="tag to">DRY RUN</span>':'<span class="tag tg">ACTIF</span>'):'<span class="tag tr">OFF</span>';
+  const h=`${tag} <span style="color:var(--text3)">${ab.mode||'—'}</span><br>${ab.dailyPurchases||0}/${ab.maxDailyPurchases||'∞'} achats · ${ab.dailySpend||0}€/${ab.maxDailySpend||'∞'}€`;
+  document.getElementById('abS').innerHTML=h;
+  document.getElementById('abStats2').innerHTML=`
+    <div>Evalues: ${ab.evaluated||0} · Matchs: ${ab.matched||0} · Achetes: ${ab.bought||0}</div>
+    <div>Dry run bloques: ${ab.dryRunBlocked||0} · Echecs: ${ab.failed||0}</div>
+    <div>Regles actives: ${ab.activeRules||0}/${ab.rulesCount||0}</div>
+  `;
+}
+function updateNotifs(){}
+
+// ══════════ FAVORITES ══════════
+async function toggleFav(id){
+  if(favs.has(id)){favs.delete(id);await api('DELETE','/favorites/'+id)}
+  else{favs.add(id);await api('POST','/favorites/'+id)}
+  renderFeed();loadFavorites();
+}
+
+// Quick buy: opens Vinted item page directly so user can buy with one click
+function quickBuy(url){
+  if(!url){alert('URL non disponible');return}
+  // Open in new tab — user completes purchase on Vinted directly
+  const w=window.open(url,'_blank');
+  if(w)w.focus();
+}
+async function loadFavorites(){
+  const list=await api('GET','/favorites');
+  document.getElementById('favList').innerHTML=(list||[]).map(it=>
+    `<div class="deal-card" style="cursor:pointer" onclick="window.open('${safeUrl(it.url)}','_blank')">
+      <div>
+        <div style="font-weight:600;font-size:12px">${esc(it.title)}</div>
+        <div style="font-size:10px;color:var(--text3)">${esc(it.brand||'')} · ${esc(it.size||'')} · 👤 ${esc(it.seller?.login||'')}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:16px;font-weight:800;color:var(--accent)">${it.price}€</div>
+        ${it.dealLabel?'<div style="font-size:9px;color:'+it.dealColor+'">'+it.dealLabel+'</div>':''}
+      </div>
+    </div>`
+  ).join('')||'<div style="color:var(--text3);font-size:11px">Clique 🤍 sur un article pour l\'ajouter</div>';
+}
+
+// ══════════ DEALS TAB ══════════
+async function loadDeals(){
+  const [deals,arbOps,dStats]=await Promise.all([
+    api('GET','/deals/top'),api('GET','/arbitrage'),api('GET','/deals/stats')
+  ]);
+  // Stats
+  document.getElementById('dScored').textContent=dStats.itemsScored||0;
+  document.getElementById('dFound').textContent=dStats.dealsFound||0;
+  document.getElementById('dAvg').textContent=dStats.avgDealScore||'—';
+  document.getElementById('dSegs').textContent=dStats.marketSegments||0;
+  // Top deals
+  document.getElementById('topDeals').innerHTML=(deals||[]).map(d=>
+    `<div class="deal-card">
+      <div>
+        <div style="font-weight:600;font-size:12px">${esc(d.title)}</div>
+        <div style="font-size:10px;color:var(--text3)">${timeAgo(d.timestamp)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:16px;font-weight:800;color:var(--accent)">${d.price}€</div>
+        <div style="font-size:10px;color:var(--text3)">Median: ${d.median}€</div>
+        <div class="deal-badge" style="background:#22c55e22;color:#22c55e">Score ${d.score}</div>
+      </div>
+    </div>`
+  ).join('')||'<div class="empty"><div class="eic">💎</div><div>Les deals apparaitront ici apres quelques cycles de scan</div></div>';
+  // Arbitrage
+  document.getElementById('arbCount').textContent=arbOps.length?`(${arbOps.length})`:'';
+  document.getElementById('arbList').innerHTML=(arbOps||[]).map(o=>
+    `<div class="arb-card">
+      <div style="font-weight:600;margin-bottom:4px">${esc(o.title)}</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div><span class="tag tb">${o.buy.country.toUpperCase()}</span> ${o.buy.price}€</div>
+        <div style="color:var(--text3)">→</div>
+        <div><span class="tag tp">${o.sell.country.toUpperCase()}</span> ${o.sell.price}€</div>
+        <div class="profit">+${o.profit}€ (${o.profitPct}%)</div>
+      </div>
+    </div>`
+  ).join('')||'<div style="color:var(--text3);font-size:11px">Active le multi-pays dans config.json pour detecter les opportunites</div>';
+}
+
+// ══════════ STATS TAB ══════════
+function updateFullStats(s){
+  if(!s)return;
+  const ds=s.deals||{};
+  document.getElementById('xItems').textContent=s.totalItems||0;
+  document.getElementById('xSellers').textContent=ds.trackedSellers||0;
+  document.getElementById('xSegs').textContent=ds.marketSegments||0;
+  document.getElementById('xMem').textContent=Math.round((s.memory?.heapUsed||0)/1024/1024);
+  // Sessions detail
+  let sh='';for(const[c,info]of Object.entries(s.sessions||{})){if(!info.sessions)continue;sh+=`${c.toUpperCase()}: ${info.alive}/${info.total} (${info.totalRequests} req, ${info.totalErrors} err)<br>`}
+  document.getElementById('xSess').innerHTML=sh||'—';
+  document.getElementById('xNotifs').innerHTML=`Envoyees: ${s.notifications?.sent||0}<br>Echouees: ${s.notifications?.failed||0}<br>Canaux: ${JSON.stringify(s.notifications?.byChannel||{})}`;
+  const ab=s.autobuy||{};
+  document.getElementById('xAB').innerHTML=`Evalues: ${ab.evaluated||0}<br>Matchs: ${ab.matched||0}<br>Achetes: ${ab.bought||0}<br>Dry run: ${ab.dryRunBlocked||0}`;
+  document.getElementById('xCountries').innerHTML=(s.countries||[]).map(c=>`<span class="tag tb" style="margin:2px">${c.toUpperCase()}</span>`).join('')||'—';
+}
+
+// ══════════ EXPORT ══════════
+function exportData(format){
+  const data=items.map(it=>({id:it.id,title:it.title,price:it.price,brand:it.brand,size:it.size,condition:it.condition,seller:it.seller?.login,rating:it.seller?.rating,url:it.url,dealScore:it.dealScore,dealLabel:it.dealLabel,marketMedian:it.marketMedian,scrapedAt:it.scrapedAt}));
+  let content,mime,ext;
+  if(format==='csv'){
+    const hdr=Object.keys(data[0]||{}).join(',');
+    const rows=data.map(r=>Object.values(r).map(v=>'"'+(v??'')+'"').join(','));
+    content=hdr+'\n'+rows.join('\n');mime='text/csv';ext='csv';
+  }else{
+    content=JSON.stringify(data,null,2);mime='application/json';ext='json';
+  }
+  const blob=new Blob([content],{type:mime});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`vinted-export-${new Date().toISOString().slice(0,10)}.${ext}`;a.click();
+}
+
+function timeAgo(ts){if(!ts)return'';const s=Math.floor((Date.now()-new Date(ts).getTime())/1000);if(s<5)return'now';if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'j'}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function safeUrl(u){try{const p=new URL(u||'');return(p.protocol==='https:'||p.protocol==='http:')?p.href:'#'}catch{return'#'}}
+
+// ══════════ BOT CONTROL ══════════
+// Two separate buttons: Start and Stop. Only one visible at a time.
+async function startBotAction(){
+  const btn=document.getElementById('botStart');
+  btn.style.opacity='0.5'; btn.style.pointerEvents='none';
+  botBtnLocked=true;
+  try{
+    const r=await api('POST','/bot/start');
+    if(r.error==='no_queries'){
+      alert('Ajoute au moins un filtre dans l\'onglet Recherches avant de lancer le bot !');
+      switchTab('search');
+    } else if(!r.ok){
+      alert(r.message||r.error||'Erreur au demarrage');
+    } else {
+      botRunning=true;
+    }
+  }catch(e){console.error(e);alert('Erreur connexion serveur')}
+  btn.style.opacity='1'; btn.style.pointerEvents='auto';
+  updateBotBtns();
+  setTimeout(()=>{botBtnLocked=false},3000);
+}
+
+async function stopBotAction(){
+  const btn=document.getElementById('botStop');
+  btn.style.opacity='0.5'; btn.style.pointerEvents='none';
+  botBtnLocked=true;
+  try{
+    const r=await api('POST','/bot/stop');
+    if(r.ok) botRunning=false;
+  }catch(e){console.error(e)}
+  btn.style.opacity='1'; btn.style.pointerEvents='auto';
+  updateBotBtns();
+  setTimeout(()=>{botBtnLocked=false},3000);
+}
+
+function updateBotBtns(){
+  document.getElementById('botStart').style.display = botRunning ? 'none' : 'flex';
+  document.getElementById('botStop').style.display = botRunning ? 'flex' : 'none';
+}
+
+// ══════════ DEAL THRESHOLDS ══════════
+let dealThresholds = { steal: 40, deal: 25, good: 15 };
+
+function saveDealThresholds(){
+  dealThresholds.steal = parseInt(document.getElementById('thresh-steal').value) || 40;
+  dealThresholds.deal = parseInt(document.getElementById('thresh-deal').value) || 25;
+  dealThresholds.good = parseInt(document.getElementById('thresh-good').value) || 15;
+  localStorage.setItem('dealThresholds', JSON.stringify(dealThresholds));
+  // Re-classify all items
+  items.forEach(it => classifyDeal(it));
+  loadDeals();
+  const btn=document.querySelector('[onclick="saveDealThresholds()"]');
+  btn.textContent='✅ Sauvegarde !';setTimeout(()=>btn.textContent='Sauvegarder les seuils',1200);
+}
+
+function loadDealThresholds(){
+  try{const s=localStorage.getItem('dealThresholds');if(s){dealThresholds=JSON.parse(s)}}catch{}
+  document.getElementById('thresh-steal').value=dealThresholds.steal;
+  document.getElementById('thresh-deal').value=dealThresholds.deal;
+  document.getElementById('thresh-good').value=dealThresholds.good;
+}
+
+function classifyDeal(item){
+  if(!item.marketMedian || item.marketMedian<=0) return;
+  const pctBelow = ((item.marketMedian - item.price) / item.marketMedian) * 100;
+  item.dealPct = Math.round(pctBelow);
+  if(pctBelow >= dealThresholds.steal){ item.dealTier='steal'; item.dealLabel='🔥 STEAL -'+item.dealPct+'%'; item.dealColor='#22c55e'; }
+  else if(pctBelow >= dealThresholds.deal){ item.dealTier='deal'; item.dealLabel='💎 DEAL -'+item.dealPct+'%'; item.dealColor='#22d3a7'; }
+  else if(pctBelow >= dealThresholds.good){ item.dealTier='good'; item.dealLabel='👍 BON -'+item.dealPct+'%'; item.dealColor='#3b82f6'; }
+  else if(pctBelow >= 0){ item.dealTier='normal'; item.dealLabel='😐 NORMAL'; item.dealColor='#64748b'; }
+  else { item.dealTier='expensive'; item.dealLabel='📈 +'+Math.abs(item.dealPct)+'%'; item.dealColor='#ef4444'; }
+}
+
+let activeDealFilter = 'all';
+function filterDeals(tier, btn){
+  activeDealFilter=tier;
+  document.querySelectorAll('.deal-filter').forEach(b=>b.className='btn btn-g deal-filter');
+  if(btn) btn.className='btn btn-a deal-filter active';
+  renderDealList();
+}
+
+function renderDealList(){
+  const filtered = activeDealFilter==='all' ? items : items.filter(it=>it.dealTier===activeDealFilter);
+  const sorted = [...filtered].sort((a,b)=>(b.dealPct||0)-(a.dealPct||0));
+  document.getElementById('topDeals').innerHTML=sorted.slice(0,50).map(d=>{
+    const tier=d.dealTier||'normal';
+    const tierColors={steal:'#22c55e33',deal:'#22d3a722',good:'#3b82f622',normal:'transparent',expensive:'#ef444422'};
+    return `<div class="deal-card" style="cursor:pointer;border-left:3px solid ${d.dealColor||'var(--border)'};background:${tierColors[tier]||'transparent'}" onclick="window.open('${safeUrl(d.url)}','_blank')">
+      <div style="display:flex;gap:10px;align-items:center">
+        ${d.photo?`<img src="${d.photo}" style="width:40px;height:40px;border-radius:6px;object-fit:cover">`:''}
+        <div>
+          <div style="font-weight:600;font-size:12px">${esc(d.title)}</div>
+          <div style="font-size:10px;color:var(--text3)">${esc(d.brand||'')} · ${esc(d.size||'')} · 👤 ${esc(d.seller?.login||'')} ${d.seller?.rating?'('+d.seller.rating+'⭐)':''}</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:16px;font-weight:800;color:var(--accent)">${d.price}€</div>
+        ${d.marketMedian?`<div style="font-size:10px;color:var(--text3)">Moy: ${d.marketMedian}€</div>`:''}
+        ${d.dealLabel?`<span style="font-size:9px;font-weight:700;color:${d.dealColor}">${d.dealLabel}</span>`:''}
+      </div>
+    </div>`;
+  }).join('')||'<div class="empty"><div class="eic">💎</div><div>Les deals apparaitront apres quelques cycles</div></div>';
+}
+
+// ══════════ VINTED CREDENTIALS ══════════
+async function saveVintedCredentials(){
+  const email=document.getElementById('vinted-email').value.trim();
+  const password=document.getElementById('vinted-password').value;
+  const statusEl=document.getElementById('vintedAuthStatus');
+  if(!email||!password){statusEl.innerHTML='<span style="color:var(--danger)">Email et mot de passe requis</span>';return}
+  statusEl.innerHTML='<span style="color:var(--orange)">Connexion en cours...</span>';
+  try{
+    const r=await api('POST','/autobuy/credentials',{email,password});
+    if(r.ok){
+      statusEl.innerHTML='<span style="color:var(--success)">✅ Identifiants sauvegardes. La session authentifiee sera creee au prochain achat.</span>';
+      document.getElementById('vinted-password').value='';
+    }else{
+      statusEl.innerHTML=`<span style="color:var(--danger)">❌ ${r.error||'Erreur'}</span>`;
+    }
+  }catch(e){statusEl.innerHTML='<span style="color:var(--danger)">Erreur connexion</span>'}
+}
+
+async function toggleAutobuy(enabled){
+  await api('POST','/autobuy/config',{enabled});
+}
+async function toggleDryRun(dryRun){
+  await api('POST','/autobuy/config',{dryRun});
+}
+async function updateAutobuyConfig(){
+  await api('POST','/autobuy/config',{
+    maxDailyPurchases: parseInt(document.getElementById('ab-max-daily').value)||5,
+    maxDailySpend: parseInt(document.getElementById('ab-max-spend').value)||200,
+    cooldownBetweenBuysMs: (parseInt(document.getElementById('ab-cooldown').value)||60)*1000,
+    mode: document.getElementById('ab-mode').value,
+  });
+}
+
+// ══════════ AUTOBUY CHECKBOX TOGGLE ══════════
+document.getElementById('sq-autobuy')?.addEventListener('change',function(){
+  document.getElementById('sq-autobuy-opts').style.display=this.checked?'block':'none';
+});
+
+// ══════════ INIT ══════════
+loadDealThresholds();
+initCatalog();
+loadQueries();
+loadRules();
+loadSellers();
+loadWatchlist();
+fetch('/api/items').then(r=>r.json()).then(d=>{if(d?.length){items=d;renderFeed()}}).catch(()=>{});
+// Check bot status on load
+fetch('/api/bot/status').then(r=>r.json()).then(s=>{botRunning=s.running;updateBotBtns()}).catch(()=>{});
+</script>
+</body>
+</html>
