@@ -56,11 +56,13 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 /** Forum topic definitions — created once in the supergroup. */
 const TOPIC_DEFINITIONS = [
-  { key: 'feed',    name: '\ud83d\udce1 Feed',    iconColor: 0x6FB9F0 },
-  { key: 'deals',   name: '\ud83d\udc8e Deals',   iconColor: 0xFFD67E },
-  { key: 'autobuy', name: '\ud83e\udd16 Autobuy', iconColor: 0xCB86DB },
-  { key: 'stats',   name: '\ud83d\udcca Stats',   iconColor: 0x8EEE98 },
-  { key: 'alertes', name: '\u26a0\ufe0f Alertes', iconColor: 0xFF93B2 },
+  { key: 'feed',      name: '\ud83d\udce1 Feed',         iconColor: 0x6FB9F0 },
+  { key: 'deals',     name: '\ud83d\udc8e Deals',        iconColor: 0xFFD67E },
+  { key: 'autobuy',   name: '\ud83e\udd16 Autobuy',      iconColor: 0xCB86DB },
+  { key: 'listings',  name: '\ud83c\udff7\ufe0f Mise en vente', iconColor: 0x8EEE98 },
+  { key: 'compta',    name: '\ud83d\udcb0 Comptabilit\u00e9',   iconColor: 0xFFD67E },
+  { key: 'stats',     name: '\ud83d\udcca Stats',        iconColor: 0x8EEE98 },
+  { key: 'alertes',   name: '\u26a0\ufe0f Alertes',      iconColor: 0xFF93B2 },
 ];
 
 /** Steps for the filter creation wizard (order matters). */
@@ -563,6 +565,14 @@ export class TelegramBot {
         case '/annonce':
           await this.cmdListing(chatId, args, opts);
           break;
+        case '/vendu':
+        case '/sold':
+          await this.cmdVendu(chatId, args, opts);
+          break;
+        case '/bilan':
+        case '/compta':
+          await this.cmdBilan(chatId, opts);
+          break;
         case '/cancel':
           await this.sendMessage(chatId, '\u274c Op\u00e9ration annul\u00e9e.', opts);
           break;
@@ -647,23 +657,31 @@ export class TelegramBot {
    */
   async cmdListing(chatId, args, opts) {
     if (!args.length) {
+      // Send help in the listings topic
+      const listingsOpts = { ...opts };
+      if (this.topicIds.listings) listingsOpts.message_thread_id = this.topicIds.listings;
+
       await this.sendMessage(chatId, [
-        '📝 <b>Generateur d\'annonce Vinted</b>',
+        '\ud83c\udff7\ufe0f <b>MISE EN VENTE — G\u00e9n\u00e9rateur d\'annonce</b>',
         '',
-        'Usage: <code>/listing jogging nike gris M</code>',
+        'Tape <code>/listing</code> + description courte :',
         '',
-        'Tu peux preciser:',
-        '• Marque (nike, adidas, jordan...)',
-        '• Type (jogging, tshirt, baskets...)',
-        '• Couleur (noir, blanc, gris...)',
-        '• Taille (S, M, L, 42...)',
-        '• Etat: neuf, tres bon, bon',
-        '',
-        'Exemples:',
+        '<code>/listing jogging nike gris M</code>',
         '<code>/listing air max 90 blanc 42 neuf</code>',
         '<code>/listing pull ralph lauren bleu M</code>',
-        '<code>/listing jean levis 501 noir 32</code>',
-      ].join('\n'), opts);
+        '<code>/listing doudoune north face noire L</code>',
+        '',
+        '\ud83d\udca1 Le bot d\u00e9tecte automatiquement :',
+        '\u2022 70+ marques (Nike, Jordan, Gucci...)',
+        '\u2022 30+ types (jogging, baskets, sac...)',
+        '\u2022 20+ couleurs',
+        '\u2022 Tailles (S, M, L, 42...)',
+        '\u2022 \u00c9tat (neuf, tr\u00e8s bon, bon)',
+        '',
+        '\ud83d\udcb0 Pour enregistrer une vente :',
+        '<code>/vendu [article] [prix]</code>',
+        'Ex: <code>/vendu jogging nike 25</code>',
+      ].join('\n'), listingsOpts);
       return;
     }
 
@@ -673,37 +691,223 @@ export class TelegramBot {
       const input = args.join(' ');
       const result = gen.generate(input);
 
+      // Always post in the listings topic
+      const listingsOpts = { ...opts };
+      if (this.topicIds.listings) listingsOpts.message_thread_id = this.topicIds.listings;
+
       const msg = [
-        '📝 <b>ANNONCE GENEREE</b>',
-        '━━━━━━━━━━━━━━━━━━━━━',
+        '\ud83c\udff7\ufe0f <b>ANNONCE PR\u00caTE</b>',
+        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
         '',
-        `<b>Titre:</b>`,
+        '\ud83d\udccc <b>Titre \u00e0 copier :</b>',
         `<code>${escapeHtml(result.title)}</code>`,
         '',
-        `<b>Description:</b>`,
+        '\ud83d\udcdd <b>Description \u00e0 copier :</b>',
+        '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
         `<pre>${escapeHtml(result.description)}</pre>`,
+        '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
         '',
-        `💰 <b>Prix suggere:</b> ${result.suggestedPrice?.suggested || '?'}€`,
-        result.suggestedPrice?.range ? `   Fourchette: ${result.suggestedPrice.range.low}-${result.suggestedPrice.range.high}€` : '',
+        `\ud83d\udcb0 <b>Prix sugg\u00e9r\u00e9 :</b> ${result.suggestedPrice?.suggested || '?'}\u20ac`,
+        result.suggestedPrice?.range ? `\ud83d\udcca Fourchette : ${result.suggestedPrice.range.low}\u20ac \u2014 ${result.suggestedPrice.range.high}\u20ac` : '',
         '',
-        `🏷 <b>Tags:</b> ${result.tags?.join(', ') || '-'}`,
+        `\ud83c\udff7 <b>Tags :</b> ${result.tags?.join(' \u2022 ') || '-'}`,
         '',
-        '💡 <b>Conseils:</b>',
-        ...(result.tips?.slice(0, 4).map(t => `  ${t}`) || []),
+        '\ud83d\udca1 <b>Conseils :</b>',
+        ...(result.tips?.slice(0, 3).map(t => `  ${t}`) || []),
       ].filter(Boolean).join('\n');
 
       await this.sendMessage(chatId, msg, {
-        ...opts,
+        ...listingsOpts,
         reply_markup: JSON.stringify({
           inline_keyboard: [
-            [{ text: '📋 Copier le titre', callback_data: `copy:title:${Buffer.from(result.title).toString('base64').slice(0, 50)}` }],
-            [{ text: '🔄 Regenerer', callback_data: `listing:${Buffer.from(input).toString('base64').slice(0, 50)}` }],
+            [
+              { text: '\ud83d\udd04 Reg\u00e9n\u00e9rer', callback_data: `regen:${Buffer.from(input).toString('base64').slice(0, 55)}` },
+              { text: '\u2705 Mis en vente', callback_data: `listed:${Buffer.from(JSON.stringify({t:result.title,p:result.suggestedPrice?.suggested||0})).toString('base64').slice(0, 55)}` },
+            ],
           ],
         }),
       });
     } catch (error) {
-      await this.sendMessage(chatId, `❌ Erreur: ${escapeHtml(error.message)}`, opts);
+      await this.sendMessage(chatId, `\u274c Erreur: ${escapeHtml(error.message)}`, listingsOpts || opts);
     }
+  }
+
+  /**
+   * /vendu [description] [prix] — Enregistre une vente dans la compta
+   */
+  async cmdVendu(chatId, args, opts) {
+    const comptaOpts = { ...opts };
+    if (this.topicIds.compta) comptaOpts.message_thread_id = this.topicIds.compta;
+
+    if (args.length < 2) {
+      await this.sendMessage(chatId, [
+        '\ud83d\udcb0 <b>COMPTABILIT\u00c9 — Enregistrer une vente</b>',
+        '',
+        'Usage : <code>/vendu [article] [prix de vente]</code>',
+        '',
+        'Exemples :',
+        '<code>/vendu jogging nike 25</code>',
+        '<code>/vendu air max 90 45</code>',
+        '<code>/vendu pull ralph lauren 35</code>',
+        '',
+        'Le bot calcule automatiquement :',
+        '\u2022 Marge nette (- frais plateforme 5%)',
+        '\u2022 Marge brute (- frais livraison)',
+        '\u2022 Profit si tu avais un prix d\'achat',
+        '',
+        '\ud83d\udcca Pour voir le bilan : <code>/bilan</code>',
+      ].join('\n'), comptaOpts);
+      return;
+    }
+
+    // Parse: last arg is price, rest is description
+    const prixStr = args[args.length - 1];
+    const prix = parseFloat(prixStr);
+    if (isNaN(prix)) {
+      await this.sendMessage(chatId, '\u274c Le dernier mot doit \u00eatre le prix.\nEx: <code>/vendu jogging nike 25</code>', comptaOpts);
+      return;
+    }
+    const description = args.slice(0, -1).join(' ');
+
+    // CRM: try to find matching item in inventory and mark as sold
+    let crmMatch = null;
+    if (this.sniper?.crm) {
+      const items = this.sniper.crm.getAll();
+      // Try to find by fuzzy title match
+      const descLower = description.toLowerCase();
+      crmMatch = items.find(it =>
+        it.status !== 'vendu' &&
+        (it.title?.toLowerCase().includes(descLower) || descLower.includes(it.title?.toLowerCase()?.slice(0, 10)))
+      );
+      if (crmMatch) {
+        this.sniper.crm.markSold(crmMatch.id, prix);
+      }
+    }
+
+    // Record the sale
+    const sale = {
+      id: `sale-${Date.now()}`,
+      description,
+      prixVente: prix,
+      prixAchat: crmMatch?.purchasePrice || null,
+      fraisPlateforme: Math.round(prix * 0.05 * 100) / 100,
+      fraisLivraison: 3,
+      margeNette: null,
+      profit: null,
+      date: new Date().toISOString(),
+      crmItemId: crmMatch?.id || null,
+    };
+
+    sale.margeNette = Math.round((prix - sale.fraisPlateforme - sale.fraisLivraison) * 100) / 100;
+    if (sale.prixAchat) {
+      sale.profit = Math.round((sale.margeNette - sale.prixAchat) * 100) / 100;
+    }
+
+    // Store sale in memory (and persist if CRM available)
+    if (!this._sales) this._sales = [];
+    this._sales.push(sale);
+
+    // Build message
+    const lines = [
+      '\u2705 <b>VENTE ENREGISTR\u00c9E</b>',
+      '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+      '',
+      `\ud83c\udff7\ufe0f <b>${escapeHtml(description)}</b>`,
+      '',
+      `\ud83d\udcb5 Prix de vente : <b>${prix}\u20ac</b>`,
+    ];
+
+    if (sale.prixAchat) {
+      lines.push(`\ud83d\uded2 Prix d'achat : ${sale.prixAchat}\u20ac`);
+    }
+
+    lines.push(`\ud83c\udfed Frais plateforme (5%) : -${sale.fraisPlateforme}\u20ac`);
+    lines.push(`\ud83d\udce6 Frais livraison : -${sale.fraisLivraison}\u20ac`);
+    lines.push('');
+    lines.push(`\ud83d\udcb0 <b>Marge nette : ${sale.margeNette}\u20ac</b>`);
+
+    if (sale.profit !== null) {
+      const profitIcon = sale.profit >= 0 ? '\ud83d\udfe2' : '\ud83d\udd34';
+      lines.push(`${profitIcon} <b>Profit : ${sale.profit >= 0 ? '+' : ''}${sale.profit}\u20ac</b>`);
+    }
+
+    if (crmMatch) {
+      lines.push('');
+      lines.push(`\ud83d\udd17 Article CRM : ${escapeHtml(crmMatch.title || '?')}`);
+    }
+
+    // Running totals
+    const totalVentes = this._sales.reduce((s, v) => s + v.prixVente, 0);
+    const totalMarges = this._sales.reduce((s, v) => s + v.margeNette, 0);
+    const totalProfits = this._sales.filter(v => v.profit !== null).reduce((s, v) => s + v.profit, 0);
+
+    lines.push('');
+    lines.push('\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
+    lines.push(`\ud83d\udcca <b>Cumul :</b> ${this._sales.length} ventes \u2022 ${Math.round(totalVentes)}\u20ac CA \u2022 ${Math.round(totalMarges)}\u20ac marge \u2022 ${Math.round(totalProfits)}\u20ac profit`);
+
+    await this.sendMessage(chatId, lines.join('\n'), comptaOpts);
+  }
+
+  /**
+   * /bilan — Affiche le bilan comptable
+   */
+  async cmdBilan(chatId, opts) {
+    const comptaOpts = { ...opts };
+    if (this.topicIds.compta) comptaOpts.message_thread_id = this.topicIds.compta;
+
+    const sales = this._sales || [];
+
+    if (sales.length === 0) {
+      await this.sendMessage(chatId, [
+        '\ud83d\udcb0 <b>BILAN COMPTABLE</b>',
+        '',
+        'Aucune vente enregistr\u00e9e.',
+        '',
+        'Utilise <code>/vendu [article] [prix]</code> pour enregistrer une vente.',
+      ].join('\n'), comptaOpts);
+      return;
+    }
+
+    const totalCA = sales.reduce((s, v) => s + v.prixVente, 0);
+    const totalFrais = sales.reduce((s, v) => s + v.fraisPlateforme + v.fraisLivraison, 0);
+    const totalMarges = sales.reduce((s, v) => s + v.margeNette, 0);
+    const totalAchats = sales.filter(v => v.prixAchat).reduce((s, v) => s + v.prixAchat, 0);
+    const totalProfits = sales.filter(v => v.profit !== null).reduce((s, v) => s + v.profit, 0);
+    const avgMarge = sales.length > 0 ? Math.round(totalMarges / sales.length * 100) / 100 : 0;
+    const margePercent = totalCA > 0 ? Math.round(totalMarges / totalCA * 100) : 0;
+
+    // Top 5 recent sales
+    const recent = sales.slice(-5).reverse();
+
+    const lines = [
+      '\ud83d\udcb0 <b>BILAN COMPTABLE</b>',
+      '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+      '',
+      `\ud83d\udcca <b>${sales.length}</b> ventes enregistr\u00e9es`,
+      '',
+      `\ud83d\udcb5 Chiffre d'affaires : <b>${Math.round(totalCA)}\u20ac</b>`,
+      `\ud83d\uded2 Total achats : ${Math.round(totalAchats)}\u20ac`,
+      `\ud83c\udfed Total frais : ${Math.round(totalFrais)}\u20ac`,
+      '',
+      `\ud83d\udcb0 <b>Marge totale : ${Math.round(totalMarges)}\u20ac</b> (${margePercent}%)`,
+      `\ud83d\udcb0 Marge moyenne/vente : ${avgMarge}\u20ac`,
+    ];
+
+    if (totalAchats > 0) {
+      const profitIcon = totalProfits >= 0 ? '\ud83d\udfe2' : '\ud83d\udd34';
+      lines.push(`${profitIcon} <b>Profit net : ${totalProfits >= 0 ? '+' : ''}${Math.round(totalProfits)}\u20ac</b>`);
+      const roi = totalAchats > 0 ? Math.round(totalProfits / totalAchats * 100) : 0;
+      lines.push(`\ud83d\udcc8 ROI : ${roi}%`);
+    }
+
+    lines.push('');
+    lines.push('<b>5 derni\u00e8res ventes :</b>');
+    for (const s of recent) {
+      const profitStr = s.profit !== null ? ` (${s.profit >= 0 ? '+' : ''}${s.profit}\u20ac)` : '';
+      lines.push(`\u2022 ${escapeHtml(s.description)} \u2014 ${s.prixVente}\u20ac${profitStr}`);
+    }
+
+    await this.sendMessage(chatId, lines.join('\n'), comptaOpts);
   }
 
   async cmdWatchSeller(chatId, args, opts) {
@@ -863,6 +1067,57 @@ export class TelegramBot {
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
         break;
       }
+      case 'listings': {
+        const text = [
+          '\ud83c\udff7\ufe0f <b>MISE EN VENTE</b>',
+          '',
+          'G\u00e9n\u00e8re une annonce Vinted optimis\u00e9e SEO',
+          '\u00e0 partir d\'une description courte.',
+          '',
+          '\ud83d\udcdd <b>Commandes :</b>',
+          '',
+          '<code>/listing jogging nike gris M</code>',
+          '\u2192 G\u00e9n\u00e8re titre + description + prix + tags',
+          '',
+          '<code>/vendu jogging nike 25</code>',
+          '\u2192 Enregistre une vente dans la compta',
+          '',
+          '\ud83d\udca1 70+ marques \u2022 30+ types \u2022 20+ couleurs',
+        ].join('\n');
+        await this.editMessage(chatId, messageId, text, {
+          inline_keyboard: [
+            [{ text: '\ud83c\udff7\ufe0f Cr\u00e9er une annonce', callback_data: 'act:listing_help' }],
+            [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
+          ],
+        });
+        break;
+      }
+      case 'compta': {
+        // Show bilan inline
+        const sales = this._sales || [];
+        const totalCA = sales.reduce((s, v) => s + v.prixVente, 0);
+        const totalMarges = sales.reduce((s, v) => s + v.margeNette, 0);
+        const totalProfits = sales.filter(v => v.profit !== null).reduce((s, v) => s + v.profit, 0);
+        const text = [
+          '\ud83d\udcb0 <b>COMPTABILIT\u00c9</b>',
+          '',
+          `\ud83d\udcca ${sales.length} vente${sales.length !== 1 ? 's' : ''} enregistr\u00e9e${sales.length !== 1 ? 's' : ''}`,
+          `\ud83d\udcb5 CA : ${Math.round(totalCA)}\u20ac`,
+          `\ud83d\udcb0 Marge : ${Math.round(totalMarges)}\u20ac`,
+          sales.some(v => v.profit !== null) ? `${totalProfits >= 0 ? '\ud83d\udfe2' : '\ud83d\udd34'} Profit : ${totalProfits >= 0 ? '+' : ''}${Math.round(totalProfits)}\u20ac` : '',
+          '',
+          '\ud83d\udcdd <b>Commandes :</b>',
+          '<code>/vendu [article] [prix]</code> \u2014 Enregistrer une vente',
+          '<code>/bilan</code> \u2014 Bilan complet',
+        ].filter(Boolean).join('\n');
+        await this.editMessage(chatId, messageId, text, {
+          inline_keyboard: [
+            [{ text: '\ud83d\udcca Bilan complet', callback_data: 'act:bilan' }],
+            [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
+          ],
+        });
+        break;
+      }
       case 'dealconfig': {
         const thresholds = this.sniper?.dealScorer?.getThresholds() ?? {
           labels: [[90, 'PEPITE'], [75, 'Super deal'], [60, 'Bon prix'], [45, 'Prix correct'], [30, 'Au-dessus'], [0, 'Cher']],
@@ -909,6 +1164,32 @@ export class TelegramBot {
           await this.editMessage(chatId, messageId, '\u23f8\ufe0f <b>Bot arr\u00eat\u00e9.</b>', { inline_keyboard: [[backBtn]] });
           await this.sendToTopic('feed', '\u23f8\ufe0f <b>Scraping arr\u00eat\u00e9</b> via Telegram.');
         }
+        break;
+      }
+      case 'listing_help': {
+        const helpText = [
+          '\ud83c\udff7\ufe0f <b>COMMENT CR\u00c9ER UNE ANNONCE</b>',
+          '',
+          'Tape directement dans ce chat :',
+          '',
+          '<code>/listing jogging nike gris M</code>',
+          '<code>/listing air max 90 blanc 42 neuf</code>',
+          '<code>/listing doudoune north face noire L</code>',
+          '',
+          'Le bot g\u00e9n\u00e8re automatiquement :',
+          '\u2022 \ud83d\udccc Titre SEO optimis\u00e9',
+          '\u2022 \ud83d\udcdd Description compl\u00e8te avec emojis',
+          '\u2022 \ud83d\udcb0 Prix sugg\u00e9r\u00e9 (fourchette)',
+          '\u2022 \ud83c\udff7 Tags pour la visibilit\u00e9',
+          '\u2022 \ud83d\udca1 Conseils photo et publication',
+        ].join('\n');
+        await this.editMessage(chatId, messageId, helpText, { inline_keyboard: [[backBtn]] });
+        break;
+      }
+      case 'bilan': {
+        // Send full bilan as new message in compta topic
+        await this.cmdBilan(chatId, {});
+        await this.editMessage(chatId, messageId, '\ud83d\udcca Bilan envoy\u00e9 dans le topic Comptabilit\u00e9', { inline_keyboard: [[backBtn]] });
         break;
       }
       case 'export_json':

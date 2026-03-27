@@ -177,6 +177,10 @@ export function formatMainMenu(sniper, config) {
         { text: '\ud83e\udd16 Autobuy', callback_data: 'nav:autobuy' },
       ],
       [
+        { text: '\ud83c\udff7\ufe0f Mise en vente', callback_data: 'nav:listings' },
+        { text: '\ud83d\udcb0 Comptabilit\u00e9', callback_data: 'nav:compta' },
+      ],
+      [
         { text: '\ud83d\udcca Stats', callback_data: 'nav:stats' },
         { text: '\u2699\ufe0f Config', callback_data: 'nav:config' },
       ],
