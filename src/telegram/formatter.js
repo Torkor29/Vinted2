@@ -119,20 +119,76 @@ export function progressDots(current, total) {
  * Buttons: Buy | View on Vinted
  */
 export function itemKeyboard(item) {
-  const buttons = [];
+  const row1 = [];
+  const row2 = [];
+
   if (item.url) {
-    // /buy suffix goes directly to Vinted checkout page
     const buyUrl = item.url.includes('/items/') && !item.url.includes('/buy')
       ? item.url.replace(/\/?$/, '') + '/buy'
       : item.url;
-    buttons.push({ text: '\ud83d\uded2 Acheter', url: buyUrl });
-    buttons.push({ text: '\u2197\ufe0f Voir', url: item.url });
+    row1.push({ text: '\ud83d\uded2 Acheter', url: buyUrl });
+    row1.push({ text: '\u2197\ufe0f Voir', url: item.url });
   }
   if (item.id) {
-    buttons.push({ text: '\u2764\ufe0f Favori', callback_data: `fav:${item.id}` });
+    // "J'ai acheté" button → triggers purchase tracking flow
+    row2.push({ text: '\u2705 J\'ai achet\u00e9', callback_data: `bought:${item.id}` });
+    row2.push({ text: '\u2764\ufe0f Favori', callback_data: `fav:${item.id}` });
   }
-  if (buttons.length === 0) return undefined;
-  return { inline_keyboard: [buttons] };
+  const rows = [];
+  if (row1.length) rows.push(row1);
+  if (row2.length) rows.push(row2);
+  if (rows.length === 0) return undefined;
+  return { inline_keyboard: rows };
+}
+
+/**
+ * Keyboard for an item in the Achats topic (post-purchase actions).
+ */
+export function achatKeyboard(item, purchaseId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '\ud83c\udff7\ufe0f Cr\u00e9er annonce', callback_data: `mkl:${purchaseId}` },
+        { text: '\u2705 Vendu', callback_data: `sell:${purchaseId}` },
+      ],
+      item.url ? [{ text: '\u2197\ufe0f Voir sur Vinted', url: item.url }] : [],
+    ].filter(r => r.length > 0),
+  };
+}
+
+/**
+ * Format a purchase confirmation message for the Achats topic.
+ */
+export function formatPurchaseCard(item, purchase) {
+  const lines = [
+    `\ud83d\uded2 <b>ACHAT ENREGISTR\u00c9</b>`,
+    SEP,
+    '',
+    `\ud83c\udff7\ufe0f <b>${escapeHtml(item.title || 'Article')}</b>`,
+    '',
+  ];
+
+  if (item.brand) lines.push(`\ud83c\udfe0 Marque : ${escapeHtml(item.brand)}`);
+  if (item.size) lines.push(`\ud83d\udccf Taille : ${escapeHtml(item.size)}`);
+  if (item.condition) lines.push(`\ud83d\udce6 \u00c9tat : ${escapeHtml(item.condition)}`);
+  if (item.seller?.login) lines.push(`\ud83d\udc64 Vendeur : ${escapeHtml(item.seller.login)}`);
+
+  lines.push('');
+  lines.push(`\ud83d\udcb5 <b>Prix article : ${purchase.itemPrice}\u20ac</b>`);
+  if (purchase.shippingCost) lines.push(`\ud83d\udce6 Livraison : ${purchase.shippingCost}\u20ac`);
+  if (purchase.protectionFee) lines.push(`\ud83d\udee1\ufe0f Protection : ${purchase.protectionFee}\u20ac`);
+  lines.push(`\ud83d\udcb0 <b>Co\u00fbt total : ${purchase.totalCost}\u20ac</b>`);
+
+  lines.push('');
+  lines.push(`\ud83d\udcc5 ${new Date(purchase.date).toLocaleDateString('fr-FR')}`);
+  lines.push('');
+  lines.push('\u2b07\ufe0f <i>Utilise les boutons ci-dessous quand tu voudras revendre ou marquer comme vendu.</i>');
+
+  return {
+    text: lines.join('\n'),
+    reply_markup: achatKeyboard(item, purchase.id),
+    photo: item.photo || null,
+  };
 }
 
 // ══════════════════════════════════════════

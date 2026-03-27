@@ -56,13 +56,13 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 /** Forum topic definitions — created once in the supergroup. */
 const TOPIC_DEFINITIONS = [
-  { key: 'feed',      name: '\ud83d\udce1 Feed',         iconColor: 0x6FB9F0 },
-  { key: 'deals',     name: '\ud83d\udc8e Deals',        iconColor: 0xFFD67E },
-  { key: 'autobuy',   name: '\ud83e\udd16 Autobuy',      iconColor: 0xCB86DB },
-  { key: 'listings',  name: '\ud83c\udff7\ufe0f Mise en vente', iconColor: 0x8EEE98 },
-  { key: 'compta',    name: '\ud83d\udcb0 Comptabilit\u00e9',   iconColor: 0xFFD67E },
-  { key: 'stats',     name: '\ud83d\udcca Stats',        iconColor: 0x8EEE98 },
-  { key: 'alertes',   name: '\u26a0\ufe0f Alertes',      iconColor: 0xFF93B2 },
+  { key: 'feed',      name: '\ud83d\udce1 Feed',              iconColor: 0x6FB9F0 },
+  { key: 'deals',     name: '\ud83d\udc8e Deals',             iconColor: 0xFFD67E },
+  { key: 'achats',    name: '\ud83d\uded2 Achats',            iconColor: 0x8EEE98 },
+  { key: 'listings',  name: '\ud83c\udff7\ufe0f Mise en vente', iconColor: 0xCB86DB },
+  { key: 'compta',    name: '\ud83d\udcb0 Comptabilit\u00e9', iconColor: 0xFFD67E },
+  { key: 'stats',     name: '\ud83d\udcca Stats',             iconColor: 0x8EEE98 },
+  { key: 'alertes',   name: '\u26a0\ufe0f Alertes',           iconColor: 0xFF93B2 },
 ];
 
 /** Steps for the filter creation wizard (order matters). */
@@ -612,10 +612,19 @@ export class TelegramBot {
           await this.handleBrandSearchText(chatId, userId, text);
           break;
         default:
+          // Handle purchase tracking conversations (use conv.type)
+          if (conv.type === 'bought_price') {
+            await this.handleBoughtPriceResponse(chatId, userId, text);
+            return;
+          }
+          if (conv.type === 'sell_price') {
+            await this.handleSellPriceResponse(chatId, userId, text);
+            return;
+          }
           break;
       }
     } catch (error) {
-      log.error(`Erreur conversation ${conv.command}: ${error.message}`);
+      log.error(`Erreur conversation ${conv.command || conv.type}: ${error.message}`);
       await this.sendMessage(chatId, `\u274c Erreur: ${escapeHtml(error.message)}`);
     }
   }
@@ -910,6 +919,334 @@ export class TelegramBot {
     await this.sendMessage(chatId, lines.join('\n'), comptaOpts);
   }
 
+  // ══════════════════════════════════════════
+  //  PURCHASE TRACKING PIPELINE
+  //  Feed → 🛒 Achats → 🏷️ Mise en vente → 💰 Comptabilité
+  // ══════════════════════════════════════════
+
+  /**
+   * "J'ai acheté" button clicked on a Feed/Deals item.
+   * Asks for the total price paid, then records the purchase in Achats topic.
+   */
+  async handleBought(chatId, messageId, userId, itemIdStr) {
+    const itemId = parseInt(itemIdStr, 10);
+
+    // Find the item in recent items (dashboard cache or search cache)
+    let item = this.sniper?.dashboard?.recentItems?.find(it => it.id === itemId);
+    if (!item) {
+      // Try fetching from Vinted API
+      try {
+        const details = await this.sniper?.search?.getItemDetails(this.config.countries?.[0] || 'fr', itemId);
+        if (details) item = details;
+      } catch {}
+    }
+
+    if (!item) {
+      item = { id: itemId, title: `Article #${itemId}`, price: 0 };
+    }
+
+    // Start a conversation to ask for the price paid
+    this.setConv(userId, {
+      type: 'bought_price',
+      step: 'price',
+      item,
+      chatId,
+      messageId,
+    });
+
+    const suggestedPrice = item.price || '?';
+    await this.editMessage(chatId, messageId, [
+      `\ud83d\uded2 <b>Enregistrer l'achat</b>`,
+      '',
+      `\ud83c\udff7\ufe0f ${escapeHtml(item.title || '')}`,
+      `\ud83d\udcb5 Prix affich\u00e9 : ${suggestedPrice}\u20ac`,
+      '',
+      `<b>Quel prix total as-tu pay\u00e9 ?</b> (article + livraison + protection)`,
+      '',
+      `Envoie le montant total (ex: <code>${suggestedPrice}</code>)`,
+      `ou <code>annuler</code>`,
+    ].join('\n'));
+  }
+
+  /**
+   * Handles text response for purchase price entry.
+   * Called from handleTextMessage when conv.type === 'bought_price'.
+   */
+  async handleBoughtPriceResponse(chatId, userId, text) {
+    const conv = this.getConv(userId);
+    if (!conv || conv.type !== 'bought_price') return false;
+
+    if (text.toLowerCase() === 'annuler') {
+      this.clearConv(userId);
+      await this.sendMessage(chatId, '\u274c Achat annul\u00e9.');
+      return true;
+    }
+
+    const totalPaid = parseFloat(text.replace(',', '.'));
+    if (isNaN(totalPaid) || totalPaid <= 0) {
+      await this.sendMessage(chatId, '\u274c Envoie un montant valide (ex: <code>15.50</code>)');
+      return true;
+    }
+
+    const item = conv.item;
+    this.clearConv(userId);
+
+    // Create purchase record
+    const purchase = {
+      id: `pur-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      itemId: item.id,
+      title: item.title || '',
+      brand: item.brand || '',
+      size: item.size || '',
+      condition: item.condition || '',
+      seller: item.seller?.login || '',
+      itemPrice: item.price || totalPaid,
+      shippingCost: Math.max(0, Math.round((totalPaid - (item.price || totalPaid)) * 0.7 * 100) / 100),
+      protectionFee: Math.max(0, Math.round((totalPaid - (item.price || totalPaid)) * 0.3 * 100) / 100),
+      totalCost: totalPaid,
+      url: item.url || '',
+      photo: item.photo || '',
+      date: new Date().toISOString(),
+      status: 'achete', // achete → en_vente → vendu
+      salePrice: null,
+      saleDate: null,
+      profit: null,
+    };
+
+    // Store in purchases map
+    if (!this._purchases) this._purchases = new Map();
+    this._purchases.set(purchase.id, purchase);
+
+    // Also store in CRM if available
+    if (this.sniper?.crm) {
+      this.sniper.crm.addPurchase(item, { price: totalPaid });
+    }
+
+    // Post purchase card in Achats topic
+    const { formatPurchaseCard } = await import('./formatter.js');
+    const msg = formatPurchaseCard(item, purchase);
+
+    if (msg.photo) {
+      await this.sendPhotoToTopic('achats', msg.photo, msg.text, {
+        reply_markup: JSON.stringify(msg.reply_markup),
+      });
+    } else {
+      await this.sendToTopic('achats', msg.text, {
+        reply_markup: JSON.stringify(msg.reply_markup),
+      });
+    }
+
+    // Confirm to user
+    await this.sendMessage(chatId, [
+      `\u2705 <b>Achat enregistr\u00e9 !</b>`,
+      `${escapeHtml(item.title)} \u2014 ${totalPaid}\u20ac`,
+      '',
+      `\u27a1\ufe0f Retrouve-le dans le topic <b>\ud83d\uded2 Achats</b>`,
+    ].join('\n'));
+
+    return true;
+  }
+
+  /**
+   * "Créer annonce" button from Achats topic.
+   * Generates a listing and posts it in Mise en vente topic.
+   */
+  async handleMakeListing(chatId, messageId, purchaseId) {
+    const purchase = this._purchases?.get(purchaseId);
+    if (!purchase) {
+      await this.editMessage(chatId, messageId, '\u274c Achat non trouv\u00e9.');
+      return;
+    }
+
+    try {
+      const { ListingGenerator } = await import('../crm/listing-generator.js');
+      const gen = new ListingGenerator();
+
+      // Build input from purchase details
+      const input = [purchase.title, purchase.brand, purchase.size].filter(Boolean).join(' ');
+      const result = gen.generate(input);
+
+      // Post in Mise en vente topic
+      const listingMsg = [
+        `\ud83c\udff7\ufe0f <b>ANNONCE PR\u00caTE</b>`,
+        `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501`,
+        '',
+        `\ud83d\udccc <b>Titre :</b>`,
+        `<code>${escapeHtml(result.title)}</code>`,
+        '',
+        `\ud83d\udcdd <b>Description :</b>`,
+        `<pre>${escapeHtml(result.description)}</pre>`,
+        '',
+        `\ud83d\udcb0 <b>Prix sugg\u00e9r\u00e9 :</b> ${result.suggestedPrice?.suggested || '?'}\u20ac`,
+        result.suggestedPrice?.range ? `\ud83d\udcca Fourchette : ${result.suggestedPrice.range.low}\u20ac \u2014 ${result.suggestedPrice.range.high}\u20ac` : '',
+        '',
+        `\ud83d\uded2 <b>Achet\u00e9 :</b> ${purchase.totalCost}\u20ac`,
+        `\ud83d\udcc8 <b>Marge estim\u00e9e :</b> ${Math.round((result.suggestedPrice?.suggested || 0) * 0.95 - 3 - purchase.totalCost)}\u20ac`,
+      ].filter(Boolean).join('\n');
+
+      if (purchase.photo) {
+        await this.sendPhotoToTopic('listings', purchase.photo, listingMsg);
+      } else {
+        await this.sendToTopic('listings', listingMsg);
+      }
+
+      // Update purchase status
+      purchase.status = 'en_vente';
+
+      await this.editMessage(chatId, messageId,
+        `\u2705 Annonce g\u00e9n\u00e9r\u00e9e dans <b>\ud83c\udff7\ufe0f Mise en vente</b>\n\nPrix sugg\u00e9r\u00e9: ${result.suggestedPrice?.suggested}\u20ac`,
+        { inline_keyboard: [
+          [{ text: '\u2705 Vendu', callback_data: `sell:${purchaseId}` }],
+        ]},
+      );
+    } catch (error) {
+      await this.sendMessage(chatId, `\u274c Erreur: ${escapeHtml(error.message)}`);
+    }
+  }
+
+  /**
+   * "Vendu" button from Achats topic.
+   * Asks for sale price then records in Comptabilité.
+   */
+  async handleMarkSold(chatId, messageId, userId, purchaseId) {
+    const purchase = this._purchases?.get(purchaseId);
+    if (!purchase) {
+      await this.editMessage(chatId, messageId, '\u274c Achat non trouv\u00e9.');
+      return;
+    }
+
+    // Start conversation to ask for sale price
+    this.setConv(userId, {
+      type: 'sell_price',
+      step: 'price',
+      purchaseId,
+      chatId,
+      messageId,
+    });
+
+    await this.editMessage(chatId, messageId, [
+      `\u2705 <b>Marquer comme vendu</b>`,
+      '',
+      `\ud83c\udff7\ufe0f ${escapeHtml(purchase.title)}`,
+      `\ud83d\uded2 Achet\u00e9 : ${purchase.totalCost}\u20ac`,
+      '',
+      `<b>\u00c0 combien l'as-tu vendu ?</b>`,
+      `Envoie le prix de vente (ex: <code>35</code>)`,
+    ].join('\n'));
+  }
+
+  /**
+   * Handles text response for sale price entry.
+   */
+  async handleSellPriceResponse(chatId, userId, text) {
+    const conv = this.getConv(userId);
+    if (!conv || conv.type !== 'sell_price') return false;
+
+    if (text.toLowerCase() === 'annuler') {
+      this.clearConv(userId);
+      await this.sendMessage(chatId, '\u274c Annul\u00e9.');
+      return true;
+    }
+
+    const salePrice = parseFloat(text.replace(',', '.'));
+    if (isNaN(salePrice) || salePrice <= 0) {
+      await this.sendMessage(chatId, '\u274c Envoie un prix valide (ex: <code>35</code>)');
+      return true;
+    }
+
+    const purchase = this._purchases?.get(conv.purchaseId);
+    if (!purchase) {
+      this.clearConv(userId);
+      await this.sendMessage(chatId, '\u274c Achat non trouv\u00e9.');
+      return true;
+    }
+
+    this.clearConv(userId);
+
+    // Calculate profit
+    const platformFee = Math.round(salePrice * 0.05 * 100) / 100; // 5% Vinted
+    const shippingCost = 3; // Approx
+    const netRevenue = Math.round((salePrice - platformFee - shippingCost) * 100) / 100;
+    const profit = Math.round((netRevenue - purchase.totalCost) * 100) / 100;
+    const marginPercent = purchase.totalCost > 0 ? Math.round(profit / purchase.totalCost * 100) : 0;
+
+    // Update purchase
+    purchase.status = 'vendu';
+    purchase.salePrice = salePrice;
+    purchase.saleDate = new Date().toISOString();
+    purchase.profit = profit;
+
+    // Record in sales (for /bilan)
+    if (!this._sales) this._sales = [];
+    this._sales.push({
+      id: `sale-${Date.now()}`,
+      description: purchase.title,
+      prixVente: salePrice,
+      prixAchat: purchase.totalCost,
+      fraisPlateforme: platformFee,
+      fraisLivraison: shippingCost,
+      margeNette: netRevenue,
+      profit,
+      date: new Date().toISOString(),
+      crmItemId: purchase.id,
+    });
+
+    // CRM update
+    if (this.sniper?.crm) {
+      this.sniper.crm.markSold(purchase.itemId, salePrice);
+    }
+
+    // Post in Comptabilité topic
+    const profitIcon = profit >= 0 ? '\ud83d\udfe2' : '\ud83d\udd34';
+    const comptaMsg = [
+      `${profitIcon} <b>VENTE ENREGISTR\u00c9E</b>`,
+      `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501`,
+      '',
+      `\ud83c\udff7\ufe0f <b>${escapeHtml(purchase.title)}</b>`,
+      '',
+      `\ud83d\uded2 Achet\u00e9 : ${purchase.totalCost}\u20ac`,
+      `\ud83d\udcb5 Vendu : ${salePrice}\u20ac`,
+      `\ud83c\udfed Frais plateforme (5%) : -${platformFee}\u20ac`,
+      `\ud83d\udce6 Frais livraison : -${shippingCost}\u20ac`,
+      '',
+      `${profitIcon} <b>Profit : ${profit >= 0 ? '+' : ''}${profit}\u20ac (${marginPercent}%)</b>`,
+      '',
+      `\ud83d\udcc5 ${new Date().toLocaleDateString('fr-FR')}`,
+    ].join('\n');
+
+    if (purchase.photo) {
+      await this.sendPhotoToTopic('compta', purchase.photo, comptaMsg);
+    } else {
+      await this.sendToTopic('compta', comptaMsg);
+    }
+
+    // Running totals
+    const totalSales = this._sales.length;
+    const totalProfit = this._sales.reduce((s, v) => s + (v.profit || 0), 0);
+
+    // Confirm
+    await this.sendMessage(chatId, [
+      `\u2705 <b>Vente enregistr\u00e9e !</b>`,
+      '',
+      `${profitIcon} Profit : ${profit >= 0 ? '+' : ''}${profit}\u20ac`,
+      `\ud83d\udcca Cumul : ${totalSales} ventes \u2022 ${totalProfit >= 0 ? '+' : ''}${Math.round(totalProfit)}\u20ac profit total`,
+    ].join('\n'));
+
+    return true;
+  }
+
+  /**
+   * Regenerate a listing from the regen: callback.
+   */
+  async handleRegenListing(chatId, messageId, encodedInput) {
+    try {
+      const input = Buffer.from(encodedInput, 'base64').toString('utf-8');
+      await this.cmdListing(chatId, input.split(' '), {});
+    } catch {
+      await this.sendMessage(chatId, '\u274c Utilise /listing directement.');
+    }
+  }
+
   async cmdWatchSeller(chatId, args, opts) {
     if (!args.length) {
       await this.sendMessage(chatId, 'Usage: /watch_seller [pseudo]\nExemple: /watch_seller jean_mode75', opts);
@@ -996,6 +1333,14 @@ export class TelegramBot {
       // ── Buy confirm/cancel ──
       if (data.startsWith('buy_confirm:')) return await this.executeBuy(chatId, data.split(':')[1]);
       if (data.startsWith('buy_cancel:'))  return await this.editMessage(chatId, messageId, '\u274c Achat annul\u00e9.');
+      // ── Purchase tracking: "J'ai acheté" button ──
+      if (data.startsWith('bought:'))      return await this.handleBought(chatId, messageId, userId, data.slice(7));
+      // ── Post-purchase: "Créer annonce" from Achats topic ──
+      if (data.startsWith('mkl:'))         return await this.handleMakeListing(chatId, messageId, data.slice(4));
+      // ── Post-purchase: "Vendu" from Achats topic ──
+      if (data.startsWith('sell:'))        return await this.handleMarkSold(chatId, messageId, userId, data.slice(5));
+      // ── Regenerate listing ──
+      if (data.startsWith('regen:'))       return await this.handleRegenListing(chatId, messageId, data.slice(6));
 
     } catch (error) {
       log.error(`Erreur callback "${data}": ${error.message}`);
