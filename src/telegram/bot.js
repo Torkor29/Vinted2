@@ -559,6 +559,10 @@ export class TelegramBot {
         case '/unwatch_seller':
           await this.cmdUnwatchSeller(chatId, args, opts);
           break;
+        case '/listing':
+        case '/annonce':
+          await this.cmdListing(chatId, args, opts);
+          break;
         case '/cancel':
           await this.sendMessage(chatId, '\u274c Op\u00e9ration annul\u00e9e.', opts);
           break;
@@ -641,6 +645,67 @@ export class TelegramBot {
   /**
    * /watch_seller [username]
    */
+  async cmdListing(chatId, args, opts) {
+    if (!args.length) {
+      await this.sendMessage(chatId, [
+        '📝 <b>Generateur d\'annonce Vinted</b>',
+        '',
+        'Usage: <code>/listing jogging nike gris M</code>',
+        '',
+        'Tu peux preciser:',
+        '• Marque (nike, adidas, jordan...)',
+        '• Type (jogging, tshirt, baskets...)',
+        '• Couleur (noir, blanc, gris...)',
+        '• Taille (S, M, L, 42...)',
+        '• Etat: neuf, tres bon, bon',
+        '',
+        'Exemples:',
+        '<code>/listing air max 90 blanc 42 neuf</code>',
+        '<code>/listing pull ralph lauren bleu M</code>',
+        '<code>/listing jean levis 501 noir 32</code>',
+      ].join('\n'), opts);
+      return;
+    }
+
+    try {
+      const { ListingGenerator } = await import('../crm/listing-generator.js');
+      const gen = new ListingGenerator();
+      const input = args.join(' ');
+      const result = gen.generate(input);
+
+      const msg = [
+        '📝 <b>ANNONCE GENEREE</b>',
+        '━━━━━━━━━━━━━━━━━━━━━',
+        '',
+        `<b>Titre:</b>`,
+        `<code>${escapeHtml(result.title)}</code>`,
+        '',
+        `<b>Description:</b>`,
+        `<pre>${escapeHtml(result.description)}</pre>`,
+        '',
+        `💰 <b>Prix suggere:</b> ${result.suggestedPrice?.suggested || '?'}€`,
+        result.suggestedPrice?.range ? `   Fourchette: ${result.suggestedPrice.range.low}-${result.suggestedPrice.range.high}€` : '',
+        '',
+        `🏷 <b>Tags:</b> ${result.tags?.join(', ') || '-'}`,
+        '',
+        '💡 <b>Conseils:</b>',
+        ...(result.tips?.slice(0, 4).map(t => `  ${t}`) || []),
+      ].filter(Boolean).join('\n');
+
+      await this.sendMessage(chatId, msg, {
+        ...opts,
+        reply_markup: JSON.stringify({
+          inline_keyboard: [
+            [{ text: '📋 Copier le titre', callback_data: `copy:title:${Buffer.from(result.title).toString('base64').slice(0, 50)}` }],
+            [{ text: '🔄 Regenerer', callback_data: `listing:${Buffer.from(input).toString('base64').slice(0, 50)}` }],
+          ],
+        }),
+      });
+    } catch (error) {
+      await this.sendMessage(chatId, `❌ Erreur: ${escapeHtml(error.message)}`, opts);
+    }
+  }
+
   async cmdWatchSeller(chatId, args, opts) {
     if (!args.length) {
       await this.sendMessage(chatId, 'Usage: /watch_seller [pseudo]\nExemple: /watch_seller jean_mode75', opts);

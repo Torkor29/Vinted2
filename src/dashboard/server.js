@@ -408,6 +408,20 @@ export class Dashboard {
     });
 
     // ── Export: trigger export from dashboard with optional filters ──
+    // ── Listing Generator ──
+    this.app.post('/api/listing/generate', async (req, res) => {
+      try {
+        const { ListingGenerator } = await import('../crm/listing-generator.js');
+        const gen = new ListingGenerator();
+        const { input, condition, size, price, gender, extras } = req.body;
+        if (!input) return res.json({ ok: false, error: 'input required (ex: "jogging nike gris")' });
+        const result = gen.generate(input, { condition, size, price: price ? +price : undefined, gender, extras });
+        res.json({ ok: true, ...result });
+      } catch (error) {
+        res.json({ ok: false, error: error.message });
+      }
+    });
+
     this.app.post('/api/export', (req, res) => {
       const exporter = this.modules.sniper?.exporter;
       if (!exporter) return res.json({ ok: false, error: 'exporter not ready' });
