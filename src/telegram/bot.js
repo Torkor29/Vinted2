@@ -631,6 +631,11 @@ export class TelegramBot {
             await this.handleSellPriceResponse(chatId, userId, text);
             return;
           }
+          // Handle photo wizard text input (custom price)
+          if (conv.type === 'photo_wizard') {
+            const handled = await this.handlePhotoWizardText(chatId, userId, text);
+            if (handled) return;
+          }
           break;
       }
     } catch (error) {
@@ -738,49 +743,41 @@ export class TelegramBot {
   // ══════════════════════════════════════════
 
   /**
-   * /photo — Show image search panel with references list.
+   * /photo — Shows current references + "Nouvelle recherche photo" button.
    */
   async cmdPhoto(chatId, opts) {
     const imgSearch = this.sniper?.imageSearch;
     const refs = imgSearch?.getReferences?.() || [];
-    const mode = imgSearch?.mode || 'color-hash';
     const threshold = imgSearch?.threshold || 0.70;
 
     const lines = [
       '\ud83d\udcf8 <b>RECHERCHE PAR PHOTO</b>',
       '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
       '',
-      `\ud83d\udee0\ufe0f Mode : <b>${mode}</b>`,
-      `\ud83c\udfaf Seuil : <b>${Math.round(threshold * 100)}%</b>`,
-      `\ud83d\udcce R\u00e9f\u00e9rences : <b>${refs.length}</b>`,
-      '',
     ];
 
     if (refs.length > 0) {
-      lines.push('<b>Images de r\u00e9f\u00e9rence :</b>');
+      lines.push(`\ud83d\udcce <b>${refs.length} recherche(s) photo active(s) :</b>`);
       refs.forEach((ref, i) => {
         lines.push(`  ${i + 1}. ${escapeHtml(ref.label || ref.id)}`);
       });
       lines.push('');
+    } else {
+      lines.push('<i>Aucune recherche photo active.</i>');
+      lines.push('');
     }
 
-    lines.push('\ud83d\udcf8 <i>Envoie une photo pour l\'ajouter comme r\u00e9f\u00e9rence.</i>');
-    lines.push('<i>Chaque article sera compar\u00e9 visuellement avec tes photos.</i>');
+    lines.push('\ud83d\udc47 <b>Envoie une photo</b> pour lancer une nouvelle recherche.');
+    lines.push('<i>Le bot te demandera le prix max, la taille, etc.</i>');
 
     const keyboard = { inline_keyboard: [] };
     if (refs.length > 0) {
       keyboard.inline_keyboard.push([
         { text: '\ud83d\uddd1\ufe0f Tout supprimer', callback_data: 'act:photo_clear' },
-        { text: '\ud83d\udd04 Rafra\u00eechir', callback_data: 'act:photo_refresh' },
       ]);
     }
-    // Threshold buttons
     keyboard.inline_keyboard.push([
-      { text: `Seuil: 50%${threshold === 0.5 ? ' \u2713' : ''}`, callback_data: 'act:photo_thr:50' },
-      { text: `70%${threshold === 0.7 ? ' \u2713' : ''}`, callback_data: 'act:photo_thr:70' },
-      { text: `85%${threshold === 0.85 ? ' \u2713' : ''}`, callback_data: 'act:photo_thr:85' },
-    ]);
-    keyboard.inline_keyboard.push([
+      { text: `\ud83c\udfaf Seuil: ${Math.round(threshold * 100)}%`, callback_data: 'act:photo_thr_cycle' },
       { text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' },
     ]);
 
@@ -792,7 +789,7 @@ export class TelegramBot {
 
   /**
    * Handles a photo message sent by the user.
-   * Routes to: filter wizard photo step OR standalone photo reference add.
+   * Routes to: filter wizard step, photo mini-wizard, or price input step.
    */
   async handlePhotoMessage(message) {
     const userId = message.from?.id;
@@ -816,49 +813,255 @@ export class TelegramBot {
       return;
     }
 
-    const label = message.caption || `Photo ${Date.now()}`;
+    const label = message.caption || '';
 
-    // ── Route 1: Filter wizard photo step ──
+    // ── Route 1: Filter wizard photo step (full wizard) ──
     if (conv?.command === 'filter_wizard' && conv.step === 'photo') {
-      conv.data.photoRefs.push({ url: fileUrl, fileId, label });
+      conv.data.photoRefs.push({ url: fileUrl, fileId, label: label || `Photo ${conv.data.photoRefs.length + 1}` });
       this.setConv(userId, conv);
-
-      // Re-render the photo step to show updated count
       await this.renderFilterStep(chatId, conv.messageId, userId);
       await this.sendMessage(chatId, `\u2705 Photo ajout\u00e9e ! (${conv.data.photoRefs.length} au total)\nEnvoie d'autres ou clique Continuer.`);
       return;
     }
 
-    // ── Route 2: Standalone photo reference add ──
-    const imgSearch = this.sniper?.imageSearch;
-    if (!imgSearch) {
-      await this.sendMessage(chatId, '\u274c Le module de recherche par image n\'est pas actif.');
+    // ── Route 2: Photo mini-wizard already in progress (adding more photos) ──
+    if (conv?.type === 'photo_wizard' && conv.step === 'photo') {
+      conv.photos.push({ url: fileUrl, fileId, label: label || `Photo ${conv.photos.length + 1}` });
+      this.setConv(userId, conv);
+      await this.sendMessage(chatId, [
+        `\u2705 <b>${conv.photos.length} photo(s)</b> ajout\u00e9e(s)`,
+        '',
+        'Envoie d\'autres photos ou clique sur un bouton :',
+      ].join('\n'), {
+        reply_markup: JSON.stringify({ inline_keyboard: [
+          [{ text: `\u27a1\ufe0f Continuer (${conv.photos.length} photo${conv.photos.length > 1 ? 's' : ''})`, callback_data: 'pwiz:next' }],
+          [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+        ]}),
+      });
       return;
     }
 
-    try {
-      const refId = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-      await imgSearch.addReference(refId, fileUrl, label);
+    // ── Route 3: Start new photo mini-wizard ──
+    this.setConv(userId, {
+      type: 'photo_wizard',
+      step: 'photo',
+      photos: [{ url: fileUrl, fileId, label: label || 'Photo 1' }],
+      priceTo: null,
+      size: null,
+      chatId,
+    });
 
-      const refCount = imgSearch.references.size;
+    await this.sendMessage(chatId, [
+      '\ud83d\udcf8 <b>Nouvelle recherche photo !</b>',
+      '',
+      '\u2705 Photo re\u00e7ue.',
+      '',
+      'Tu peux envoyer d\'autres photos du m\u00eame article,',
+      'ou continuer pour configurer les filtres :',
+    ].join('\n'), {
+      reply_markup: JSON.stringify({ inline_keyboard: [
+        [{ text: '\u27a1\ufe0f Continuer', callback_data: 'pwiz:next' }],
+        [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+      ]}),
+    });
+  }
+
+  /**
+   * Handles photo wizard callbacks (pwiz:*).
+   */
+  async handlePhotoWizardCb(chatId, messageId, userId, action) {
+    const conv = this.getConv(userId);
+    if (!conv || conv.type !== 'photo_wizard') return;
+
+    if (action === 'cancel') {
+      this.clearConv(userId);
+      await this.editMessage(chatId, messageId, '\u274c Recherche photo annul\u00e9e.');
+      return;
+    }
+
+    // ── "next" from photo step → ask price ──
+    if (action === 'next' && conv.step === 'photo') {
+      conv.step = 'price';
+      this.setConv(userId, conv);
+
+      await this.editMessage(chatId, messageId, [
+        `\ud83d\udcf8 <b>${conv.photos.length} photo(s)</b> enregistr\u00e9e(s)`,
+        '',
+        '\ud83d\udcb0 <b>Prix maximum ?</b>',
+        '',
+        'Choisis un budget ou tape un montant :',
+      ].join('\n'), { inline_keyboard: [
+        [
+          { text: '10\u20ac', callback_data: 'pwiz:pr:10' },
+          { text: '20\u20ac', callback_data: 'pwiz:pr:20' },
+          { text: '30\u20ac', callback_data: 'pwiz:pr:30' },
+        ],
+        [
+          { text: '50\u20ac', callback_data: 'pwiz:pr:50' },
+          { text: '100\u20ac', callback_data: 'pwiz:pr:100' },
+          { text: '200\u20ac', callback_data: 'pwiz:pr:200' },
+        ],
+        [{ text: '\u23ed Pas de limite', callback_data: 'pwiz:pr:0' }],
+        [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+      ]});
+      return;
+    }
+
+    // ── Price selection ──
+    if (action.startsWith('pr:')) {
+      const price = parseInt(action.split(':')[1], 10);
+      conv.priceTo = price > 0 ? price : null;
+      conv.step = 'size';
+      this.setConv(userId, conv);
+
+      const priceText = conv.priceTo ? `${conv.priceTo}\u20ac max` : 'Pas de limite';
+      await this.editMessage(chatId, messageId, [
+        `\ud83d\udcf8 ${conv.photos.length} photo(s) \u00b7 \ud83d\udcb0 ${priceText}`,
+        '',
+        '\ud83d\udccf <b>Taille ?</b>',
+      ].join('\n'), { inline_keyboard: [
+        [
+          { text: 'XS', callback_data: 'pwiz:sz:XS' },
+          { text: 'S', callback_data: 'pwiz:sz:S' },
+          { text: 'M', callback_data: 'pwiz:sz:M' },
+          { text: 'L', callback_data: 'pwiz:sz:L' },
+          { text: 'XL', callback_data: 'pwiz:sz:XL' },
+        ],
+        [
+          { text: '36', callback_data: 'pwiz:sz:36' },
+          { text: '38', callback_data: 'pwiz:sz:38' },
+          { text: '40', callback_data: 'pwiz:sz:40' },
+          { text: '42', callback_data: 'pwiz:sz:42' },
+          { text: '44', callback_data: 'pwiz:sz:44' },
+        ],
+        [{ text: '\u23ed Toutes tailles', callback_data: 'pwiz:sz:any' }],
+        [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+      ]});
+      return;
+    }
+
+    // ── Size selection → DONE, register everything ──
+    if (action.startsWith('sz:')) {
+      const size = action.split(':')[1];
+      conv.size = size !== 'any' ? size : null;
+      this.clearConv(userId);
+
+      // Register photo references in ImageSearch
+      const imgSearch = this.sniper?.imageSearch;
+      const registered = [];
+      if (imgSearch) {
+        for (const photo of conv.photos) {
+          const refId = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+          try {
+            await imgSearch.addReference(refId, photo.url, photo.label);
+            registered.push(refId);
+          } catch (e) {
+            log.warn(`Photo ref failed: ${e.message}`);
+          }
+        }
+      }
+
+      // Build a search query with the photo filters
+      const query = { order: 'newest_first' };
+      if (conv.priceTo) query.priceTo = conv.priceTo;
+
+      // Map text sizes to Vinted size IDs
+      const SIZE_MAP = {
+        'XS': '1', 'S': '2', 'M': '3', 'L': '4', 'XL': '5', 'XXL': '6',
+        '36': '776', '37': '777', '38': '778', '39': '779', '40': '780',
+        '41': '781', '42': '782', '43': '783', '44': '784', '45': '785',
+      };
+      if (conv.size && SIZE_MAP[conv.size]) {
+        query.sizeIds = [SIZE_MAP[conv.size]];
+      }
+
+      query._labels = {
+        sizes: conv.size ? [conv.size] : undefined,
+        photoRefs: conv.photos.length,
+      };
+      query._photoSearch = true;
+      query.text = conv.photos[0]?.label || '';
+
+      // Add to sniper queries
+      if (this.sniper?.queries) {
+        this.sniper.queries.push(query);
+        this.persistQueries();
+      }
+
+      const priceText = conv.priceTo ? `${conv.priceTo}\u20ac max` : 'Pas de limite';
+      const sizeText = conv.size || 'Toutes';
+
+      await this.editMessage(chatId, messageId, [
+        '\u2705 <b>Recherche photo cr\u00e9\u00e9e !</b>',
+        '',
+        `\ud83d\udcf8 ${conv.photos.length} photo(s) de r\u00e9f\u00e9rence`,
+        `\ud83d\udcb0 Prix : ${priceText}`,
+        `\ud83d\udccf Taille : ${sizeText}`,
+        `\ud83c\udfaf Seuil : ${Math.round((imgSearch?.threshold || 0.7) * 100)}%`,
+        '',
+        '\ud83d\udd0d Le bot compare maintenant chaque article avec tes photos.',
+        '<i>Tu recevras une alerte d\u00e8s qu\'un article similaire appara\u00eet !</i>',
+      ].join('\n'), { inline_keyboard: [
+        [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
+      ]});
+
+      // Notify in feed
+      await this.sendToTopic('feed', [
+        `\ud83d\udcf8 <b>Recherche photo activ\u00e9e</b>`,
+        `${conv.photos.length} photo(s) \u00b7 ${priceText} \u00b7 Taille: ${sizeText}`,
+      ].join('\n'));
+
+      return;
+    }
+  }
+
+  /**
+   * Handles text input during photo wizard (custom price).
+   */
+  async handlePhotoWizardText(chatId, userId, text) {
+    const conv = this.getConv(userId);
+    if (!conv || conv.type !== 'photo_wizard') return false;
+
+    if (conv.step === 'price') {
+      const price = parseFloat(text.replace(',', '.'));
+      if (isNaN(price) || price <= 0) {
+        await this.sendMessage(chatId, '\u274c Envoie un prix valide (ex: <code>25</code>)');
+        return true;
+      }
+      // Simulate the price button click
+      conv.priceTo = price;
+      conv.step = 'size';
+      this.setConv(userId, conv);
+
+      const priceText = `${price}\u20ac max`;
       await this.sendMessage(chatId, [
-        `\u2705 <b>Photo de r\u00e9f\u00e9rence ajout\u00e9e !</b>`,
+        `\ud83d\udcf8 ${conv.photos.length} photo(s) \u00b7 \ud83d\udcb0 ${priceText}`,
         '',
-        `\ud83c\udff7\ufe0f Label : ${escapeHtml(label)}`,
-        `\ud83d\udcce Total : ${refCount} r\u00e9f\u00e9rence(s)`,
-        '',
-        '<i>Chaque nouvel article sera compar\u00e9 avec cette photo.</i>',
+        '\ud83d\udccf <b>Taille ?</b>',
       ].join('\n'), {
         reply_markup: JSON.stringify({ inline_keyboard: [
           [
-            { text: '\ud83d\udcf8 Voir tout', callback_data: 'act:photo_refresh' },
-            { text: '\ud83d\uddd1\ufe0f Supprimer', callback_data: `act:photo_del:${refId}` },
+            { text: 'XS', callback_data: 'pwiz:sz:XS' },
+            { text: 'S', callback_data: 'pwiz:sz:S' },
+            { text: 'M', callback_data: 'pwiz:sz:M' },
+            { text: 'L', callback_data: 'pwiz:sz:L' },
+            { text: 'XL', callback_data: 'pwiz:sz:XL' },
           ],
+          [
+            { text: '36', callback_data: 'pwiz:sz:36' },
+            { text: '38', callback_data: 'pwiz:sz:38' },
+            { text: '40', callback_data: 'pwiz:sz:40' },
+            { text: '42', callback_data: 'pwiz:sz:42' },
+            { text: '44', callback_data: 'pwiz:sz:44' },
+          ],
+          [{ text: '\u23ed Toutes tailles', callback_data: 'pwiz:sz:any' }],
+          [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
         ]}),
       });
-    } catch (e) {
-      await this.sendMessage(chatId, `\u274c Erreur ajout r\u00e9f\u00e9rence : ${escapeHtml(e.message)}`);
+      return true;
     }
+
+    return false;
   }
 
   /**
@@ -1533,6 +1736,8 @@ export class TelegramBot {
       // ── Buy confirm/cancel ──
       if (data.startsWith('buy_confirm:')) return await this.executeBuy(chatId, data.split(':')[1]);
       if (data.startsWith('buy_cancel:'))  return await this.editMessage(chatId, messageId, '\u274c Achat annul\u00e9.');
+      // ── Photo mini-wizard ──
+      if (data.startsWith('pwiz:'))        return await this.handlePhotoWizardCb(chatId, messageId, userId, data.slice(5));
       // ── Purchase tracking: "J'ai acheté" button ──
       if (data.startsWith('bought:'))      return await this.handleBought(chatId, messageId, userId, data.slice(7));
       // ── Post-purchase: "Créer annonce" from Achats topic ──
@@ -1846,18 +2051,27 @@ export class TelegramBot {
         }
         break;
       }
+      case 'photo_thr_cycle': {
+        // Cycle through thresholds: 50 → 60 → 70 → 80 → 90 → 50
+        const imgSc = this.sniper?.imageSearch;
+        if (imgSc) {
+          const current = Math.round(imgSc.threshold * 100);
+          const next = current >= 90 ? 50 : current + 10;
+          imgSc.threshold = next / 100;
+          await this.editMessage(chatId, messageId,
+            `\ud83c\udfaf Seuil de similarit\u00e9 : <b>${next}%</b>\n<i>Clique encore pour changer.</i>`,
+            { inline_keyboard: [
+              [{ text: `\ud83c\udfaf Seuil: ${next}%`, callback_data: 'act:photo_thr_cycle' }],
+              [backBtn],
+            ]});
+        }
+        break;
+      }
       default: {
-        // ── Dynamic photo actions ──
         if (action.startsWith('photo_del:')) {
           const refId = action.slice('photo_del:'.length);
           this.sniper?.imageSearch?.removeReference(refId);
-          await this.editMessage(chatId, messageId, `\ud83d\uddd1\ufe0f R\u00e9f\u00e9rence supprim\u00e9e.`, { inline_keyboard: [[backBtn]] });
-        } else if (action.startsWith('photo_thr:')) {
-          const thr = parseInt(action.slice('photo_thr:'.length), 10) / 100;
-          if (this.sniper?.imageSearch) {
-            this.sniper.imageSearch.threshold = thr;
-          }
-          await this.editMessage(chatId, messageId, `\ud83c\udfaf Seuil de similarit\u00e9 mis \u00e0 <b>${Math.round(thr * 100)}%</b>`, { inline_keyboard: [[backBtn]] });
+          await this.editMessage(chatId, messageId, '\ud83d\uddd1\ufe0f R\u00e9f\u00e9rence supprim\u00e9e.', { inline_keyboard: [[backBtn]] });
         }
         break;
       }
