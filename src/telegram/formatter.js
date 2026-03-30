@@ -209,16 +209,22 @@ export function formatMainMenu(sniper, config) {
   const autobuyOn = config?.autobuy?.enabled ?? false;
   const dryRun = config?.autobuy?.dryRun ?? true;
 
+  const turboActive = !!sniper?.turboPoller?.running;
   const statusIcon = running ? '\ud83d\udfe2' : '\ud83d\udd34';
   const statusText = running ? 'En cours' : 'Arr\u00eat\u00e9';
   const abText = autobuyOn ? (dryRun ? 'Dry Run' : 'LIVE') : 'OFF';
+  const turboText = turboActive ? 'ON' : 'OFF';
 
   const text = [
     `\u26a1 <b>VINTED SNIPER</b>`,
     SEP,
     `${statusIcon} Bot ${statusText}  \u00b7  \ud83d\udd0d ${queries} filtre${queries !== 1 ? 's' : ''}  \u00b7  \ud83d\udce1 ${aliveCount}/${totalSessions} sessions`,
-    `\ud83e\udd16 Autobuy: <b>${abText}</b>`,
+    `\ud83e\udd16 Autobuy: <b>${abText}</b>  \u00b7  \u26a1 Turbo: <b>${turboText}</b>`,
   ].join('\n');
+
+  const turboBtn = turboActive
+    ? { text: '\u26a1 Turbo ON', callback_data: 'act:turbo_off' }
+    : { text: '\u26a1 Turbo OFF', callback_data: 'act:turbo_on' };
 
   const keyboard = {
     inline_keyboard: [
@@ -231,6 +237,7 @@ export function formatMainMenu(sniper, config) {
       [
         { text: '\ud83d\udc8e Deals', callback_data: 'nav:deals' },
         { text: '\ud83e\udd16 Autobuy', callback_data: 'nav:autobuy' },
+        turboBtn,
       ],
       [
         { text: '\ud83c\udff7\ufe0f Mise en vente', callback_data: 'nav:listings' },

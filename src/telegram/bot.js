@@ -665,34 +665,65 @@ export class TelegramBot {
   }
 
   /**
-   * /turbo — Show TurboPoller stats.
+   * /turbo — Show TurboPoller stats with toggle button.
    */
   async cmdTurbo(chatId, opts) {
-    const turbo = this.sniper?.turboPoller;
-    if (!turbo) {
-      await this.sendMessage(chatId, '\u26a1 Turbo mode <b>d\u00e9sactiv\u00e9</b>. Active-le dans config.js: <code>scraper.turbo.enabled: true</code>', opts);
-      return;
+    const isActive = !!this.sniper?.turboPoller?.running;
+    await this.sendMessage(chatId, this._formatTurboMsg(isActive), {
+      ...opts,
+      reply_markup: JSON.stringify(this._turboKeyboard(isActive)),
+    });
+  }
+
+  /** Format the turbo stats message. */
+  _formatTurboMsg(isActive) {
+    if (!isActive) {
+      return [
+        '\u26a1 <b>TURBO POLLER</b>',
+        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+        '',
+        '\ud83d\udd34 Statut : <b>D\u00e9sactiv\u00e9</b>',
+        '',
+        'Le mode standard est actif (polling par cycles).',
+        'Active le turbo pour passer en polling ultra-rapide',
+        'avec des workers ind\u00e9pendants et stagger\u00e9s.',
+      ].join('\n');
     }
 
-    const s = turbo.getStats();
+    const s = this.sniper.turboPoller.getStats();
     const uptime = s.uptimeMs > 0 ? Math.round(s.uptimeMs / 60000) : 0;
 
-    await this.sendMessage(chatId, [
+    return [
       '\u26a1 <b>TURBO POLLER</b>',
       '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
       '',
-      `\ud83d\udfe2 Workers actifs : <b>${s.workersActive}</b>`,
-      `\ud83d\udce1 Polls effectu\u00e9s : <b>${s.totalPolls.toLocaleString()}</b>`,
+      `\ud83d\udfe2 Statut : <b>Actif</b>`,
+      `\ud83d\udee0\ufe0f Workers : <b>${s.workersActive}</b>`,
+      '',
+      `\ud83d\udce1 Polls : <b>${s.totalPolls.toLocaleString()}</b>`,
       `\ud83d\udce6 Items d\u00e9tect\u00e9s : <b>${s.totalItems.toLocaleString()}</b>`,
       `\u274c Erreurs : ${s.totalErrors}`,
       '',
-      `\u23f1\ufe0f D\u00e9lai actuel : <b>${s.currentDelayMs}ms</b>`,
-      `\ud83d\udcc8 R\u00e9ponse moyenne : ${s.avgResponseMs}ms`,
+      `\u23f1\ufe0f D\u00e9lai : <b>${s.currentDelayMs}ms</b>`,
+      `\ud83d\udcc8 R\u00e9ponse moy. : ${s.avgResponseMs}ms`,
       `\ud83d\udd04 Polls/min : <b>${s.pollsPerMinute}</b>`,
       `\ud83d\udce6 Items/min : <b>${s.itemsPerMinute}</b>`,
       '',
       `\u23f0 Uptime : ${uptime} min`,
-    ].join('\n'), opts);
+    ].join('\n');
+  }
+
+  /** Build turbo inline keyboard. */
+  _turboKeyboard(isActive) {
+    const toggleBtn = isActive
+      ? { text: '\u23f8\ufe0f D\u00e9sactiver Turbo', callback_data: 'act:turbo_off' }
+      : { text: '\u26a1 Activer Turbo', callback_data: 'act:turbo_on' };
+
+    const rows = [[toggleBtn]];
+    if (isActive) {
+      rows.push([{ text: '\ud83d\udd04 Rafra\u00eechir stats', callback_data: 'act:turbo_refresh' }]);
+    }
+    return { inline_keyboard: rows };
   }
 
   /**
@@ -1569,6 +1600,81 @@ export class TelegramBot {
         // Send full bilan as new message in compta topic
         await this.cmdBilan(chatId, {});
         await this.editMessage(chatId, messageId, '\ud83d\udcca Bilan envoy\u00e9 dans le topic Comptabilit\u00e9', { inline_keyboard: [[backBtn]] });
+        break;
+      }
+      case 'turbo_on': {
+        if (!this.sniper) {
+          await this.editMessage(chatId, messageId, '\u274c Bot non initialis\u00e9.', { inline_keyboard: [[backBtn]] });
+          break;
+        }
+        if (this.sniper.turboPoller?.running) {
+          await this.editMessage(chatId, messageId, this._formatTurboMsg(true), this._turboKeyboard(true));
+          break;
+        }
+        // Enable turbo: build tasks and start the TurboPoller
+        try {
+          const { TurboPoller } = await import('../scraper/turbo-poller.js');
+          const { config: cfg } = await import('../config.js');
+
+          const tasks = [];
+          for (const country of cfg.countries) {
+            for (const query of (this.sniper.queries || [])) {
+              tasks.push({ country, query });
+            }
+          }
+          if (tasks.length === 0) {
+            await this.editMessage(chatId, messageId, '\u26a0\ufe0f Ajoute d\'abord des filtres avant d\'activer le turbo.', { inline_keyboard: [[backBtn]] });
+            break;
+          }
+
+          const turboConf = cfg.scraper.turbo || {};
+          this.sniper.turboPoller = new TurboPoller(this.sniper.search, {
+            concurrency: cfg.scraper.concurrentQueries || 15,
+            workerDelayMs: turboConf.workerDelayMs || 200,
+            staggerMs: turboConf.staggerMs || 50,
+            onNewItems: async (newItems, country) => {
+              await this.sniper._processNewItems(newItems, country);
+            },
+          });
+          this.sniper.turboPoller.start(tasks);
+
+          await this.editMessage(chatId, messageId, [
+            '\u26a1 <b>TURBO ACTIV\u00c9 !</b>',
+            '',
+            `\ud83d\udee0\ufe0f ${tasks.length} t\u00e2ches lanc\u00e9es`,
+            `\ud83d\udce1 ${Math.min(tasks.length, cfg.scraper.concurrentQueries || 15)} workers parall\u00e8les`,
+            `\u23f1\ufe0f D\u00e9lai : ${turboConf.workerDelayMs || 200}ms`,
+          ].join('\n'), this._turboKeyboard(true));
+
+          await this.sendToTopic('feed', '\u26a1 <b>Mode Turbo activ\u00e9</b> — polling ultra-rapide');
+        } catch (e) {
+          await this.editMessage(chatId, messageId, `\u274c Erreur: ${escapeHtml(e.message)}`, { inline_keyboard: [[backBtn]] });
+        }
+        break;
+      }
+      case 'turbo_off': {
+        if (!this.sniper?.turboPoller?.running) {
+          await this.editMessage(chatId, messageId, this._formatTurboMsg(false), this._turboKeyboard(false));
+          break;
+        }
+        const stats = this.sniper.turboPoller.getStats();
+        await this.sniper.turboPoller.stop();
+        this.sniper.turboPoller = null;
+
+        await this.editMessage(chatId, messageId, [
+          '\u23f8\ufe0f <b>TURBO D\u00c9SACTIV\u00c9</b>',
+          '',
+          `Session : ${stats.totalPolls} polls, ${stats.totalItems} items d\u00e9tect\u00e9s`,
+          '',
+          'Retour au mode standard (polling par cycles).',
+        ].join('\n'), this._turboKeyboard(false));
+
+        await this.sendToTopic('feed', '\u23f8\ufe0f <b>Mode Turbo d\u00e9sactiv\u00e9</b> — retour polling standard');
+        break;
+      }
+      case 'turbo_refresh': {
+        const isActive = !!this.sniper?.turboPoller?.running;
+        await this.editMessage(chatId, messageId, this._formatTurboMsg(isActive), this._turboKeyboard(isActive));
         break;
       }
       case 'export_json':
