@@ -555,6 +555,9 @@ export class TelegramBot {
         case '/status':
           await this.cmdStatus(chatId, opts);
           break;
+        case '/turbo':
+          await this.cmdTurbo(chatId, opts);
+          break;
         case '/watch_seller':
           await this.cmdWatchSeller(chatId, args, opts);
           break;
@@ -662,7 +665,38 @@ export class TelegramBot {
   }
 
   /**
-   * /watch_seller [username]
+   * /turbo — Show TurboPoller stats.
+   */
+  async cmdTurbo(chatId, opts) {
+    const turbo = this.sniper?.turboPoller;
+    if (!turbo) {
+      await this.sendMessage(chatId, '\u26a1 Turbo mode <b>d\u00e9sactiv\u00e9</b>. Active-le dans config.js: <code>scraper.turbo.enabled: true</code>', opts);
+      return;
+    }
+
+    const s = turbo.getStats();
+    const uptime = s.uptimeMs > 0 ? Math.round(s.uptimeMs / 60000) : 0;
+
+    await this.sendMessage(chatId, [
+      '\u26a1 <b>TURBO POLLER</b>',
+      '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+      '',
+      `\ud83d\udfe2 Workers actifs : <b>${s.workersActive}</b>`,
+      `\ud83d\udce1 Polls effectu\u00e9s : <b>${s.totalPolls.toLocaleString()}</b>`,
+      `\ud83d\udce6 Items d\u00e9tect\u00e9s : <b>${s.totalItems.toLocaleString()}</b>`,
+      `\u274c Erreurs : ${s.totalErrors}`,
+      '',
+      `\u23f1\ufe0f D\u00e9lai actuel : <b>${s.currentDelayMs}ms</b>`,
+      `\ud83d\udcc8 R\u00e9ponse moyenne : ${s.avgResponseMs}ms`,
+      `\ud83d\udd04 Polls/min : <b>${s.pollsPerMinute}</b>`,
+      `\ud83d\udce6 Items/min : <b>${s.itemsPerMinute}</b>`,
+      '',
+      `\u23f0 Uptime : ${uptime} min`,
+    ].join('\n'), opts);
+  }
+
+  /**
+   * /listing — Generate SEO listing.
    */
   async cmdListing(chatId, args, opts) {
     if (!args.length) {

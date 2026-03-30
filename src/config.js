@@ -69,12 +69,17 @@ const defaults = {
 
   // ── Scraper settings ──
   scraper: {
-    pollIntervalMs: 800,         // 800ms aggressive polling (needs 10+ sessions)
+    pollIntervalMs: 800,         // 800ms fallback polling (if turbo disabled)
     retryAttempts: 3,
     retryBackoffMs: 1_500,
     requestTimeoutMs: 10_000,    // 10s timeout (was 15s)
-    // Max concurrent queries per poll cycle
-    concurrentQueries: 5,        // 5 parallel requests (was 3)
+    concurrentQueries: 15,       // 15 parallel workers in turbo mode
+    // ── Turbo mode: independent staggered workers ──
+    turbo: {
+      enabled: true,             // Use TurboPoller instead of cycle-based polling
+      workerDelayMs: 200,        // Min delay between polls per worker
+      staggerMs: 50,             // Stagger between worker starts
+    },
   },
 
   // ── Search queries ──

@@ -15,6 +15,7 @@ import { CRMInventory } from './crm/inventory.js';
 import { AutoPricing } from './crm/pricing.js';
 import { AutoRelance } from './crm/auto-relance.js';
 import { TelegramBot } from './telegram/bot.js';
+import { TurboPoller } from './scraper/turbo-poller.js';
 import { createLogger } from './utils/logger.js';
 import { sleep } from './utils/retry.js';
 import { readFileSync, existsSync } from 'fs';
@@ -235,22 +236,57 @@ class VintedSniper {
 
   /**
    * Main poll loop.
+   * Uses TurboPoller (staggered independent workers) when enabled,
+   * falls back to standard cycle-based polling otherwise.
    */
   async pollLoop() {
+    // Build all (country, query) pairs
+    const tasks = [];
+    for (const country of config.countries) {
+      for (const query of this.queries) {
+        tasks.push({ country, query });
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    //  TURBO MODE: staggered independent workers
+    // ═══════════════════════════════════════════
+    if (config.scraper.turbo?.enabled) {
+      const turboConf = config.scraper.turbo;
+      this.turboPoller = new TurboPoller(this.search, {
+        concurrency: config.scraper.concurrentQueries || 15,
+        workerDelayMs: turboConf.workerDelayMs || 200,
+        staggerMs: turboConf.staggerMs || 50,
+        onNewItems: async (newItems, country, query) => {
+          // Process each item through the same pipeline
+          await this._processNewItems(newItems, country);
+        },
+      });
+
+      this.turboPoller.start(tasks);
+
+      // Stats push loop (independent from polling)
+      while (this.running) {
+        if (config.dashboard.enabled) {
+          this.dashboard.pushStats();
+          // Also push turbo stats
+          this.dashboard.broadcast('turbo:stats', this.turboPoller.getStats());
+        }
+        this.pollCycles++;
+        await sleep(2000);
+      }
+
+      await this.turboPoller.stop();
+      return;
+    }
+
+    // ═══════════════════════════════════════════
+    //  STANDARD MODE: cycle-based polling (fallback)
+    // ═══════════════════════════════════════════
     while (this.running) {
       const cycleStart = Date.now();
       this.pollCycles++;
 
-      // ── SPEED OPTIMIZATION: all countries + all queries in parallel ──
-      // Build all (country, query) pairs
-      const tasks = [];
-      for (const country of config.countries) {
-        for (const query of this.queries) {
-          tasks.push({ country, query });
-        }
-      }
-
-      // Run all in parallel, limited by concurrency setting
       const concurrency = config.scraper.concurrentQueries || 3;
       const chunks = chunkArray(tasks, concurrency);
 
@@ -261,12 +297,10 @@ class VintedSniper {
         );
       }
 
-      // Push stats to dashboard
       if (config.dashboard.enabled) {
         this.dashboard.pushStats();
       }
 
-      // Wait for next cycle — minimum 1s to avoid hammering
       const elapsed = Date.now() - cycleStart;
       const waitTime = Math.max(500, config.scraper.pollIntervalMs - elapsed);
 
@@ -277,89 +311,93 @@ class VintedSniper {
   }
 
   /**
-   * Process a single search query.
+   * Process new items through the full pipeline.
+   * Shared by both TurboPoller and standard mode.
+   */
+  async _processNewItems(newItems, country) {
+    if (!this.countryStats[country]) {
+      this.countryStats[country] = { items: 0, errors: 0, lastPoll: null };
+    }
+    this.countryStats[country].lastPoll = new Date().toISOString();
+
+    // 1. Score + track
+    for (const item of newItems) {
+      this.totalNewItems++;
+      this.countryStats[country].items++;
+      this.dealScorer.scoreItem(item);
+      if (config.countries.length > 1) this.arbitrage.checkItem(item, country);
+      this.exporter.addItem(item);
+    }
+
+    // 1b. Visual matching (non-blocking for speed)
+    if (this.imageSearch.references.size > 0) {
+      for (const item of newItems) {
+        const match = await this.imageSearch.compareItem(item).catch(() => null);
+        if (match?.matches) {
+          item.visualMatch = match.bestMatch;
+          item.visualSimilarity = match.bestMatch.similarity;
+        }
+      }
+    }
+
+    // 2. Dashboard push (instant)
+    if (config.dashboard.enabled) {
+      for (const item of newItems) this.dashboard.pushNewItem(item);
+    }
+
+    // 3. Autobuy FIRST (time-sensitive)
+    if (config.autobuy.enabled) {
+      for (const item of newItems) {
+        const result = await this.autoBuyer.tryBuy(country, item);
+        if (result.purchased) {
+          log.info(`AUTO-PURCHASED: "${item.title}" for ${item.price}EUR`);
+          const crmEntry = this.crm.addPurchase(item, result.record);
+          if (this.telegramBot) this.telegramBot.notifyAutobuy(item, result.record).catch(() => {});
+          if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
+        } else if (result.dryRun) {
+          const crmEntry = this.crm.addPurchase(item, { ...result, dryRun: true, rule: result.matchedRule });
+          if (this.telegramBot) this.telegramBot.notifyAutobuy(item, { dryRun: true, rule: result.matchedRule }).catch(() => {});
+          if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
+        }
+      }
+    }
+
+    // 4. Notifications (fire-and-forget)
+    const notifPromises = newItems.map(item => {
+      const promises = [];
+      if (this.telegramBot) {
+        if (item.dealScore >= 70) {
+          promises.push(this.telegramBot.notifyDeal(item).catch(() => {}));
+        } else {
+          promises.push(this.telegramBot.notifyNewItem(item).catch(() => {}));
+        }
+      }
+      promises.push(this.notifier.notifyNewItem(item).catch(() => {}));
+      return Promise.allSettled(promises);
+    });
+    Promise.allSettled(notifPromises).catch(() => {});
+
+    // 5. Enrich top deals (background)
+    for (const item of newItems) {
+      if (item.dealScore >= this.fetchDescriptionThreshold && !item.description) {
+        this.search.enrichWithDescription(country, item).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Process a single search query (used by standard mode).
+   * Delegates to shared _processNewItems pipeline.
    */
   async processQuery(country, query) {
-    // Ensure per-country stats bucket exists
     if (!this.countryStats[country]) {
       this.countryStats[country] = { items: 0, errors: 0, lastPoll: null };
     }
 
     try {
       const newItems = await this.search.pollNewItems(country, query);
-      this.countryStats[country].lastPoll = new Date().toISOString();
-
-      // ── SPEED: Process items with minimal blocking ──
-      // 1. Score all items synchronously (pure CPU, fast)
-      for (const item of newItems) {
-        this.totalNewItems++;
-        this.countryStats[country].items++;
-        this.dealScorer.scoreItem(item);
-        if (config.countries.length > 1) this.arbitrage.checkItem(item, country);
-        this.exporter.addItem(item);
-      }
-
-      // 1b. Visual matching (if reference images configured)
-      if (this.imageSearch.references.size > 0) {
-        for (const item of newItems) {
-          const match = await this.imageSearch.compareItem(item).catch(() => null);
-          if (match?.matches) {
-            item.visualMatch = match.bestMatch;
-            item.visualSimilarity = match.bestMatch.similarity;
-            log.info(`📸 Visual match: "${item.title}" ≈ "${match.bestMatch.refLabel}" (${match.bestMatch.similarity}%)`);
-          }
-        }
-      }
-
-      // 2. Push ALL items to dashboard immediately (non-blocking)
-      if (config.dashboard.enabled) {
-        for (const item of newItems) this.dashboard.pushNewItem(item);
-      }
-
-      // 3. Autobuy FIRST for time-sensitive purchases (highest priority)
-      if (config.autobuy.enabled) {
-        for (const item of newItems) {
-          const result = await this.autoBuyer.tryBuy(country, item);
-          if (result.purchased) {
-            log.info(`AUTO-PURCHASED: "${item.title}" for ${item.price}EUR (deal: ${item.dealScore})`);
-            // Add to CRM inventory
-            const crmEntry = this.crm.addPurchase(item, result.record);
-            if (this.telegramBot) this.telegramBot.notifyAutobuy(item, result.record).catch(() => {});
-            // Push to dashboard
-            if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
-          } else if (result.dryRun) {
-            log.info(`DRY RUN: Would buy "${item.title}" for ${item.price}EUR (deal: ${item.dealScore})`);
-            // Add dry runs to CRM too (for tracking what WOULD be bought)
-            const crmEntry = this.crm.addPurchase(item, { ...result, dryRun: true, rule: result.matchedRule });
-            if (this.telegramBot) this.telegramBot.notifyAutobuy(item, { dryRun: true, rule: result.matchedRule }).catch(() => {});
-            if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
-          }
-        }
-      }
-
-      // 4. Notifications in parallel (fire-and-forget, don't block poll loop)
-      const notifPromises = newItems.map(item => {
-        const promises = [];
-        // Telegram
-        if (this.telegramBot) {
-          if (item.dealScore >= 70) {
-            promises.push(this.telegramBot.notifyDeal(item).catch(() => {}));
-          } else {
-            promises.push(this.telegramBot.notifyNewItem(item).catch(() => {}));
-          }
-        }
-        // Other channels
-        promises.push(this.notifier.notifyNewItem(item).catch(() => {}));
-        return Promise.allSettled(promises);
-      });
-      // Don't await all — let them resolve in background
-      Promise.allSettled(notifPromises).catch(() => {});
-
-      // 5. Enrich descriptions for top deals (background, non-blocking)
-      for (const item of newItems) {
-        if (item.dealScore >= this.fetchDescriptionThreshold && !item.description) {
-          this.search.enrichWithDescription(country, item).catch(() => {});
-        }
+      if (newItems.length > 0) {
+        await this._processNewItems(newItems, country);
       }
     } catch (error) {
       this.countryStats[country].errors++;
