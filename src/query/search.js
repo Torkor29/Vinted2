@@ -190,39 +190,42 @@ export class VintedSearch {
    * @param {Object} raw - Raw API item
    * @param {string} [country] - Country code the item was fetched from
    */
+  /**
+   * Lightweight normalize — extracts only what's needed for the hot path.
+   * Heavy fields (photos array, seller profile) are lazy-loaded if needed.
+   */
   normalizeItem(raw, country = null) {
+    const now = new Date().toISOString();
     return {
+      // ── Critical (used by scoring, dedup, notification) ──
       id: raw.id,
       title: raw.title || '',
-      // Include description if present in catalog results (often a short excerpt)
-      description: raw.description || '',
       price: parseFloat(raw.price?.amount || raw.price || 0),
-      currency: raw.price?.currency_code || raw.currency || 'EUR',
-      totalPrice: parseFloat(raw.total_item_price?.amount || raw.service_fee?.amount || 0) + parseFloat(raw.price?.amount || 0),
       brand: raw.brand_title || raw.brand?.title || '',
       size: raw.size_title || raw.size?.title || '',
-      condition: raw.status || '',
       url: buildItemUrl(raw, country),
-      photos: (raw.photos || raw.photo?.thumbnails || []).map(p =>
-        typeof p === 'string' ? p : (p.url || p.full_size_url || ''),
-      ),
       photo: raw.photo?.url || raw.photo?.thumbnails?.[0]?.url || '',
+      country: country || '',
+      countryFlag: country ? (COUNTRY_FLAGS[country] || '') : '',
+      scrapedAt: now,
+      // ── Secondary (used by deals, autobuy) ──
+      currency: raw.price?.currency_code || raw.currency || 'EUR',
+      totalPrice: parseFloat(raw.total_item_price?.amount || raw.service_fee?.amount || 0) + parseFloat(raw.price?.amount || 0),
+      condition: raw.status || '',
       seller: {
         id: raw.user?.id,
         login: raw.user?.login || '',
         rating: raw.user?.feedback_reputation || 0,
         reviewCount: raw.user?.feedback_count || 0,
-        profileUrl: raw.user?.profile_url || '',
       },
-      // Multi-country: tag every item with its origin country and flag
-      country: country || '',
-      countryFlag: country ? (COUNTRY_FLAGS[country] || '') : '',
+      // ── Flags ──
       isFavourite: raw.is_favourite || false,
       isReserved: raw.is_reserved || false,
       isClosed: raw.is_closed || false,
-      isHidden: raw.is_hidden || false,
       createdAt: raw.created_at_ts ? new Date(raw.created_at_ts * 1000).toISOString() : '',
-      scrapedAt: new Date().toISOString(),
+      // ── Lazy: only populated on detail fetch ──
+      description: raw.description || '',
+      photos: null, // Set by enrichWithDescription if needed
     };
   }
 

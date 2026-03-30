@@ -72,7 +72,7 @@ const defaults = {
     pollIntervalMs: 800,         // 800ms fallback polling (if turbo disabled)
     retryAttempts: 3,
     retryBackoffMs: 1_500,
-    requestTimeoutMs: 10_000,    // 10s timeout (was 15s)
+    requestTimeoutMs: 3_000,     // 3s timeout (fast-fail, free up workers)
     concurrentQueries: 15,       // 15 parallel workers in turbo mode
     // ── Turbo mode: independent staggered workers ──
     turbo: {
