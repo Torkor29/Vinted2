@@ -506,6 +506,11 @@ export class TelegramBot {
           { command: 'menu', description: 'Ouvrir le panneau de contr\u00f4le' },
           { command: 'status', description: 'Statut rapide du bot' },
           { command: 'start', description: 'D\u00e9marrer / Menu principal' },
+          { command: 'turbo', description: 'Turbo mode (stats + toggle)' },
+          { command: 'photo', description: 'Recherche par photo' },
+          { command: 'listing', description: 'G\u00e9n\u00e9rer une annonce' },
+          { command: 'bilan', description: 'Bilan comptabilit\u00e9' },
+          { command: 'myid', description: 'Afficher ton ID Telegram' },
         ]),
       });
       log.debug('Commandes enregistr\u00e9es');
