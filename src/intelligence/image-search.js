@@ -337,6 +337,146 @@ export class ImageSearch {
     return dotProduct / denom;
   }
 
+  /**
+   * Analyze an image and return human-readable visual features.
+   * Extracts dominant colors, brightness, contrast, color category.
+   * Used to show the user what the bot "sees" before matching.
+   */
+  async analyzeImage(imageUrl) {
+    try {
+      const { gotScraping } = await import('got-scraping');
+
+      const response = await gotScraping({
+        url: imageUrl,
+        responseType: 'buffer',
+        timeout: { request: 8_000 },
+        throwHttpErrors: false,
+      });
+
+      if (response.statusCode !== 200 || !response.body) {
+        return null;
+      }
+
+      const buffer = response.body;
+
+      // ── Sample pixels ──
+      let totalR = 0, totalG = 0, totalB = 0;
+      let pixelCount = 0;
+      const colorBuckets = new Map(); // "r,g,b" → count (quantized to 32 steps)
+
+      for (let i = 0; i < buffer.length - 2; i += 3) {
+        const r = buffer[i], g = buffer[i + 1], b = buffer[i + 2];
+        if (r === 0xFF && g === 0xD8) continue;
+        if (r === 0xFF && g === 0xC0) continue;
+
+        totalR += r; totalG += g; totalB += b;
+        pixelCount++;
+
+        // Quantize to 8 levels per channel for dominant color detection
+        const qr = Math.floor(r / 32) * 32;
+        const qg = Math.floor(g / 32) * 32;
+        const qb = Math.floor(b / 32) * 32;
+        const key = `${qr},${qg},${qb}`;
+        colorBuckets.set(key, (colorBuckets.get(key) || 0) + 1);
+      }
+
+      if (pixelCount < 100) return null;
+
+      const avgR = totalR / pixelCount;
+      const avgG = totalG / pixelCount;
+      const avgB = totalB / pixelCount;
+
+      // ── Dominant colors (top 3) ──
+      const sortedColors = [...colorBuckets.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      const dominantColors = sortedColors.map(([key, count]) => {
+        const [r, g, b] = key.split(',').map(Number);
+        return {
+          rgb: { r, g, b },
+          hex: `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`,
+          name: this._colorName(r, g, b),
+          percent: Math.round(count / pixelCount * 100),
+        };
+      });
+
+      // ── Brightness ──
+      const brightness = Math.round((avgR * 0.299 + avgG * 0.587 + avgB * 0.114));
+      let brightnessLabel;
+      if (brightness < 60) brightnessLabel = 'Sombre';
+      else if (brightness < 120) brightnessLabel = 'Moyen';
+      else if (brightness < 180) brightnessLabel = 'Clair';
+      else brightnessLabel = 'Très clair';
+
+      // ── Overall color category ──
+      const mainColor = dominantColors[0]?.name || 'Inconnu';
+
+      // ── Pattern detection (simple: if top color < 40%, likely patterned) ──
+      const topPercent = dominantColors[0]?.percent || 0;
+      const isUniform = topPercent > 40;
+      const patternLabel = isUniform ? 'Uni / couleur dominante' : 'Motifs / multicolore';
+
+      return {
+        dominantColors: dominantColors.slice(0, 3),
+        mainColor,
+        brightness,
+        brightnessLabel,
+        pattern: patternLabel,
+        isUniform,
+        avgRgb: { r: Math.round(avgR), g: Math.round(avgG), b: Math.round(avgB) },
+      };
+    } catch (error) {
+      log.debug(`Image analysis failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  /** Map RGB values to a French color name. */
+  _colorName(r, g, b) {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lum = (r + g + b) / 3;
+
+    // Achromatic
+    if (max - min < 30) {
+      if (lum < 50) return 'Noir';
+      if (lum < 120) return 'Gris foncé';
+      if (lum < 180) return 'Gris';
+      if (lum < 220) return 'Gris clair';
+      return 'Blanc';
+    }
+
+    // Chromatic — find dominant hue
+    const hue = this._rgbToHue(r, g, b);
+
+    if (lum < 40) return 'Noir';
+
+    if (hue < 15)  return 'Rouge';
+    if (hue < 40)  return 'Orange';
+    if (hue < 70)  return 'Jaune';
+    if (hue < 160) return 'Vert';
+    if (hue < 200) return 'Cyan';
+    if (hue < 260) return 'Bleu';
+    if (hue < 290) return 'Violet';
+    if (hue < 330) return 'Rose';
+    return 'Rouge';
+  }
+
+  _rgbToHue(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    if (d === 0) return 0;
+    let h;
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h = Math.round(h * 60);
+    if (h < 0) h += 360;
+    return h;
+  }
+
   getStats() {
     return {
       mode: this.mode,

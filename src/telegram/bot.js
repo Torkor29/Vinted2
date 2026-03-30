@@ -931,7 +931,16 @@ export class TelegramBot {
     }
 
     // ── Route 3: Start new photo mini-wizard ──
-    // If caption provided, try to parse it for brand/type/color
+    // Analyze the image visually
+    let analysis = null;
+    const imgSearch = this.sniper?.imageSearch;
+    if (imgSearch) {
+      try {
+        analysis = await imgSearch.analyzeImage(fileUrl);
+      } catch {}
+    }
+
+    // If caption provided, also parse text
     let parsed = null;
     if (caption) {
       try {
@@ -946,25 +955,29 @@ export class TelegramBot {
       step: caption ? 'confirm_parsed' : 'describe',
       photos: [{ url: fileUrl, fileId, label: caption || 'Photo 1' }],
       parsed,
+      analysis,
       caption,
       priceTo: null,
       size: null,
       chatId,
     });
 
+    // Build the visual analysis display
+    const analysisLines = this._formatImageAnalysis(analysis);
+
     if (caption && parsed) {
-      // ── Caption provided: show what we understood ──
-      await this._showParsedPhoto(chatId, parsed, caption, 1);
+      await this._showParsedPhoto(chatId, parsed, caption, 1, analysisLines);
     } else {
-      // ── No caption: ask for a quick description ──
       await this.sendMessage(chatId, [
         '\ud83d\udcf8 <b>Photo re\u00e7ue !</b>',
+        '',
+        ...analysisLines,
         '',
         '\ud83d\udcdd <b>D\u00e9cris l\'article en quelques mots :</b>',
         '<i>Ex: pull carhartt gris M</i>',
         '<i>Ex: air max 90 blanc 42</i>',
         '',
-        'Ou envoie d\'autres photos avant.',
+        'Ou envoie d\'autres photos.',
       ].join('\n'), {
         reply_markup: JSON.stringify({ inline_keyboard: [
           [{ text: '\u23ed Passer la description', callback_data: 'pwiz:skipdesc' }],
@@ -974,30 +987,66 @@ export class TelegramBot {
     }
   }
 
-  /** Show the parsed analysis of a photo + caption. */
-  async _showParsedPhoto(chatId, parsed, caption, photoCount) {
-    const lines = [
-      '\ud83d\udcf8 <b>Photo re\u00e7ue !</b>',
-      '',
-      '\ud83e\udde0 <b>Voil\u00e0 ce que j\'ai compris :</b>',
-    ];
-    if (parsed.brand)     lines.push(`  \ud83c\udff7\ufe0f Marque : <b>${escapeHtml(parsed.brand)}</b>`);
-    if (parsed.typeLabel) lines.push(`  \ud83d\udc55 Type : <b>${escapeHtml(parsed.typeLabel)}</b>`);
-    if (parsed.color)     lines.push(`  \ud83c\udfa8 Couleur : <b>${escapeHtml(parsed.color)}</b>`);
-    if (parsed.size)      lines.push(`  \ud83d\udccf Taille : <b>${escapeHtml(parsed.size)}</b>`);
-    if (parsed.model)     lines.push(`  \ud83d\udc5f Mod\u00e8le : <b>${escapeHtml(parsed.model)}</b>`);
+  /** Format image analysis into display lines. */
+  _formatImageAnalysis(analysis) {
+    if (!analysis) return [];
 
-    if (!parsed.brand && !parsed.typeLabel && !parsed.color) {
-      lines.push('  <i>Rien d\u00e9tect\u00e9 \u2014 ajoute plus de d\u00e9tails dans la description.</i>');
+    const COLOR_EMOJIS = {
+      'Noir': '\u26ab', 'Blanc': '\u26aa', 'Gris': '\u2b1c', 'Gris fonc\u00e9': '\u2b1b',
+      'Gris clair': '\u2b1c', 'Rouge': '\ud83d\udd34', 'Bleu': '\ud83d\udd35',
+      'Vert': '\ud83d\udfe2', 'Jaune': '\ud83d\udfe1', 'Orange': '\ud83d\udfe0',
+      'Violet': '\ud83d\udfe3', 'Rose': '\ud83d\udfe3', 'Cyan': '\ud83d\udd35',
+      'Marron': '\ud83d\udfe4',
+    };
+
+    const lines = [];
+    const mainColor = analysis.dominantColors?.[0];
+    if (mainColor) {
+      const emoji = COLOR_EMOJIS[mainColor.name] || '\ud83c\udfa8';
+      lines.push(`${emoji} Couleur d\u00e9tect\u00e9e : <b>${mainColor.name}</b>`);
+    }
+
+    return lines;
+  }
+
+  /** Show what the bot understood from the photo + text description. */
+  async _showParsedPhoto(chatId, parsed, caption, photoCount, analysisLines = []) {
+    const lines = ['\ud83d\udcf8 <b>Photo analys\u00e9e !</b>', ''];
+
+    // What we detected
+    const detectedParts = [];
+    if (parsed.brand)     detectedParts.push(`\ud83c\udff7\ufe0f <b>${escapeHtml(parsed.brand)}</b>`);
+    if (parsed.typeLabel) detectedParts.push(`\ud83d\udc55 <b>${escapeHtml(parsed.typeLabel)}</b>`);
+    if (parsed.color)     detectedParts.push(`\ud83c\udfa8 <b>${escapeHtml(parsed.color)}</b>`);
+    if (parsed.size)      detectedParts.push(`\ud83d\udccf <b>${escapeHtml(parsed.size)}</b>`);
+    if (parsed.model)     detectedParts.push(`\ud83d\udc5f <b>${escapeHtml(parsed.model)}</b>`);
+
+    // Color from image analysis (if not already detected from text)
+    if (!parsed.color && analysisLines.length > 0) {
+      lines.push(...analysisLines);
+      lines.push('');
+    }
+
+    if (detectedParts.length > 0) {
+      lines.push('\ud83e\udde0 <b>Article identifi\u00e9 :</b>');
+      detectedParts.forEach(p => lines.push(`  ${p}`));
+      lines.push('');
+
+      // Summary of what the search will do
+      const searchTerms = [parsed.brand, parsed.typeLabel, parsed.model].filter(Boolean).join(' ');
+      lines.push(`\ud83d\udd0d <b>Recherche :</b> "${escapeHtml(searchTerms)}"`);
+      lines.push(`\ud83d\udcf8 <b>+ comparaison visuelle</b> sur chaque r\u00e9sultat`);
+    } else {
+      lines.push('<i>Aucun d\u00e9tail reconnu \u2014 la recherche se fera uniquement par comparaison visuelle.</i>');
     }
 
     lines.push('');
-    lines.push(`\ud83d\udcce ${photoCount} photo(s)`);
+    lines.push(`\ud83d\udcce ${photoCount} photo(s) de r\u00e9f\u00e9rence`);
 
     await this.sendMessage(chatId, lines.join('\n'), {
       reply_markup: JSON.stringify({ inline_keyboard: [
-        [{ text: '\u2705 Correct, continuer', callback_data: 'pwiz:next' }],
-        [{ text: '\u270f\ufe0f Corriger la description', callback_data: 'pwiz:redescribe' }],
+        [{ text: '\u2705 C\'est bon, continuer', callback_data: 'pwiz:next' }],
+        [{ text: '\u270f\ufe0f Corriger', callback_data: 'pwiz:redescribe' }],
         [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
       ]}),
     });
@@ -1243,8 +1292,9 @@ export class TelegramBot {
       conv.step = 'confirm_parsed';
       this.setConv(userId, conv);
 
+      const analysisLines = this._formatImageAnalysis(conv.analysis);
       if (conv.parsed && (conv.parsed.brand || conv.parsed.typeLabel || conv.parsed.color)) {
-        await this._showParsedPhoto(chatId, conv.parsed, text, conv.photos.length);
+        await this._showParsedPhoto(chatId, conv.parsed, text, conv.photos.length, analysisLines);
       } else {
         // Nothing detected, go straight to price
         conv.step = 'price';
