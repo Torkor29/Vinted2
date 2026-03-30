@@ -724,28 +724,45 @@ function renderSortOptions(){
   ).join('');
 }
 
-// Brand search
+// Brand search — cache last matches for Enter-key support
+let _brandMatches=[];
 function filterBrands(){
   const q=document.getElementById('brandInput').value.toLowerCase();
   const res=document.getElementById('brandResults');
-  if(!q){res.classList.remove('show');return}
-  const matches=(cat.brands||[]).filter(b=>b.label.toLowerCase().includes(q)&&!sel.brands.find(x=>x.id===b.id)).slice(0,12);
-  res.innerHTML=matches.map(b=>`<div class="brand-opt" onmousedown="addBrand(${b.id},'${esc(b.label)}')">${b.label}</div>`).join('');
-  res.classList.toggle('show',matches.length>0);
+  if(!q){_brandMatches=[];res.classList.remove('show');return}
+  _brandMatches=(cat.brands||[]).filter(b=>b.label.toLowerCase().includes(q)&&!sel.brands.find(x=>x.id===b.id)).slice(0,12);
+  res.innerHTML=_brandMatches.map(b=>`<div class="brand-opt" data-bid="${b.id}" data-blabel="${esc(b.label)}" onmousedown="addBrandById(${b.id})">${esc(b.label)}</div>`).join('');
+  res.classList.toggle('show',_brandMatches.length>0);
+}
+function addBrandById(id){
+  const b=(cat.brands||[]).find(x=>x.id===id);
+  if(b&&!sel.brands.find(x=>x.id===id))sel.brands.push({id:b.id,label:b.label});
+  document.getElementById('brandInput').value='';
+  document.getElementById('brandResults').classList.remove('show');
+  _brandMatches=[];
+  renderBrandTags();
 }
 function addBrand(id,label){
   if(!sel.brands.find(b=>b.id===id))sel.brands.push({id,label});
   document.getElementById('brandInput').value='';
   document.getElementById('brandResults').classList.remove('show');
+  _brandMatches=[];
   renderBrandTags();
 }
+// Enter key adds the first matching brand from dropdown
+document.getElementById('brandInput')?.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    e.preventDefault();
+    if(_brandMatches.length>0)addBrandById(_brandMatches[0].id);
+  }
+});
 function removeBrand(id){
   sel.brands=sel.brands.filter(b=>b.id!==id);
   renderBrandTags();
 }
 function renderBrandTags(){
   document.getElementById('brandTags').innerHTML=sel.brands.map(b=>
-    `<div class="brand-tag">${b.label} <span class="x" onclick="removeBrand(${b.id})">✕</span></div>`
+    `<div class="brand-tag">${esc(b.label)} <span class="x" onclick="removeBrand(${b.id})">✕</span></div>`
   ).join('');
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.brand-search'))document.getElementById('brandResults').classList.remove('show')});
@@ -760,9 +777,22 @@ async function addSearchQuery(){
   const order=document.getElementById('sq-sort').value;
   if(!text&&!sel.gender&&sel.brands.length===0&&sel.cats.length===0){alert('Ajoute au moins un mot-cle, un genre ou une marque');return}
 
+  // Build catalogIds: remove parent IDs when their children are also selected
+  // (sending both parent+child broadens the search to the whole parent category)
+  let finalCats=[...sel.cats];
+  if(sel.gender&&cat.categories[sel.gender]){
+    cat.categories[sel.gender].forEach(parent=>{
+      if(parent.children&&finalCats.includes(parent.id)){
+        const hasChild=parent.children.some(ch=>finalCats.includes(ch.id));
+        if(hasChild)finalCats=finalCats.filter(id=>id!==parent.id);
+      }
+    });
+  }
+
   const query={
     text: text||undefined,
-    catalogIds: sel.cats.length?[...sel.cats]:sel.gender?[sel.gender]:undefined,
+    genderId: sel.gender||undefined,
+    catalogIds: finalCats.length?finalCats:sel.gender?[sel.gender]:undefined,
     brandIds: sel.brands.length?sel.brands.map(b=>b.id):undefined,
     sizeIds: sel.sizes.length?[...sel.sizes]:undefined,
     colorIds: sel.colors.length?[...sel.colors]:undefined,
