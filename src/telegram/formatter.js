@@ -244,6 +244,7 @@ export function formatMainMenu(sniper, config) {
         { text: '\ud83d\udcb0 Comptabilit\u00e9', callback_data: 'nav:compta' },
       ],
       [
+        { text: '\ud83d\udcf8 Photo', callback_data: 'nav:photo' },
         { text: '\ud83d\udcca Stats', callback_data: 'nav:stats' },
         { text: '\u2699\ufe0f Config', callback_data: 'nav:config' },
       ],
@@ -394,6 +395,7 @@ function buildFilterSummaryLines(data) {
     lines.push(priceLine);
   }
   if (data.text)                 lines.push(`\ud83d\udd0d "${escapeHtml(data.text)}"`);
+  if (data.photoRefs?.length)    lines.push(`\ud83d\udcf8 ${data.photoRefs.length} photo(s) de r\u00e9f\u00e9rence`);
   return lines;
 }
 

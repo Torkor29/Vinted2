@@ -66,7 +66,7 @@ const TOPIC_DEFINITIONS = [
 ];
 
 /** Steps for the filter creation wizard (order matters). */
-const FILTER_STEPS = ['gender', 'categories', 'brands', 'sizes', 'conditions', 'price', 'keywords', 'recap'];
+const FILTER_STEPS = ['gender', 'categories', 'brands', 'sizes', 'conditions', 'price', 'keywords', 'photo', 'recap'];
 const FILTER_TOTAL = FILTER_STEPS.length;
 
 /** Popular brands shown as quick-pick buttons (top 12). */
@@ -461,6 +461,9 @@ export class TelegramBot {
           try {
             if (update.callback_query) {
               await this.handleCallbackQuery(update.callback_query);
+            } else if (update.message?.photo) {
+              // ── Photo received from user ──
+              await this.handlePhotoMessage(update.message);
             } else if (update.message?.text) {
               const text = update.message.text.trim();
               if (text.startsWith('/')) {
@@ -557,6 +560,10 @@ export class TelegramBot {
           break;
         case '/turbo':
           await this.cmdTurbo(chatId, opts);
+          break;
+        case '/photo':
+        case '/photos':
+          await this.cmdPhoto(chatId, opts);
           break;
         case '/watch_seller':
           await this.cmdWatchSeller(chatId, args, opts);
@@ -724,6 +731,134 @@ export class TelegramBot {
       rows.push([{ text: '\ud83d\udd04 Rafra\u00eechir stats', callback_data: 'act:turbo_refresh' }]);
     }
     return { inline_keyboard: rows };
+  }
+
+  // ══════════════════════════════════════════
+  //  PHOTO / IMAGE SEARCH
+  // ══════════════════════════════════════════
+
+  /**
+   * /photo — Show image search panel with references list.
+   */
+  async cmdPhoto(chatId, opts) {
+    const imgSearch = this.sniper?.imageSearch;
+    const refs = imgSearch?.getReferences?.() || [];
+    const mode = imgSearch?.mode || 'color-hash';
+    const threshold = imgSearch?.threshold || 0.70;
+
+    const lines = [
+      '\ud83d\udcf8 <b>RECHERCHE PAR PHOTO</b>',
+      '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+      '',
+      `\ud83d\udee0\ufe0f Mode : <b>${mode}</b>`,
+      `\ud83c\udfaf Seuil : <b>${Math.round(threshold * 100)}%</b>`,
+      `\ud83d\udcce R\u00e9f\u00e9rences : <b>${refs.length}</b>`,
+      '',
+    ];
+
+    if (refs.length > 0) {
+      lines.push('<b>Images de r\u00e9f\u00e9rence :</b>');
+      refs.forEach((ref, i) => {
+        lines.push(`  ${i + 1}. ${escapeHtml(ref.label || ref.id)}`);
+      });
+      lines.push('');
+    }
+
+    lines.push('\ud83d\udcf8 <i>Envoie une photo pour l\'ajouter comme r\u00e9f\u00e9rence.</i>');
+    lines.push('<i>Chaque article sera compar\u00e9 visuellement avec tes photos.</i>');
+
+    const keyboard = { inline_keyboard: [] };
+    if (refs.length > 0) {
+      keyboard.inline_keyboard.push([
+        { text: '\ud83d\uddd1\ufe0f Tout supprimer', callback_data: 'act:photo_clear' },
+        { text: '\ud83d\udd04 Rafra\u00eechir', callback_data: 'act:photo_refresh' },
+      ]);
+    }
+    // Threshold buttons
+    keyboard.inline_keyboard.push([
+      { text: `Seuil: 50%${threshold === 0.5 ? ' \u2713' : ''}`, callback_data: 'act:photo_thr:50' },
+      { text: `70%${threshold === 0.7 ? ' \u2713' : ''}`, callback_data: 'act:photo_thr:70' },
+      { text: `85%${threshold === 0.85 ? ' \u2713' : ''}`, callback_data: 'act:photo_thr:85' },
+    ]);
+    keyboard.inline_keyboard.push([
+      { text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' },
+    ]);
+
+    await this.sendMessage(chatId, lines.join('\n'), {
+      ...opts,
+      reply_markup: JSON.stringify(keyboard),
+    });
+  }
+
+  /**
+   * Handles a photo message sent by the user.
+   * Routes to: filter wizard photo step OR standalone photo reference add.
+   */
+  async handlePhotoMessage(message) {
+    const userId = message.from?.id;
+    const chatId = message.chat.id;
+    const conv = this.getConv(userId);
+
+    // Get the largest photo (last in array)
+    const photoArray = message.photo;
+    const biggest = photoArray[photoArray.length - 1];
+    const fileId = biggest.file_id;
+
+    // Get the file URL from Telegram
+    let fileUrl;
+    try {
+      const fileInfo = await this.apiCall('getFile', { file_id: fileId });
+      const filePath = fileInfo.result?.file_path;
+      if (!filePath) throw new Error('No file path');
+      fileUrl = `https://api.telegram.org/file/bot${this.token}/${filePath}`;
+    } catch (e) {
+      await this.sendMessage(chatId, '\u274c Impossible de r\u00e9cup\u00e9rer la photo.');
+      return;
+    }
+
+    const label = message.caption || `Photo ${Date.now()}`;
+
+    // ── Route 1: Filter wizard photo step ──
+    if (conv?.command === 'filter_wizard' && conv.step === 'photo') {
+      conv.data.photoRefs.push({ url: fileUrl, fileId, label });
+      this.setConv(userId, conv);
+
+      // Re-render the photo step to show updated count
+      await this.renderFilterStep(chatId, conv.messageId, userId);
+      await this.sendMessage(chatId, `\u2705 Photo ajout\u00e9e ! (${conv.data.photoRefs.length} au total)\nEnvoie d'autres ou clique Continuer.`);
+      return;
+    }
+
+    // ── Route 2: Standalone photo reference add ──
+    const imgSearch = this.sniper?.imageSearch;
+    if (!imgSearch) {
+      await this.sendMessage(chatId, '\u274c Le module de recherche par image n\'est pas actif.');
+      return;
+    }
+
+    try {
+      const refId = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+      await imgSearch.addReference(refId, fileUrl, label);
+
+      const refCount = imgSearch.references.size;
+      await this.sendMessage(chatId, [
+        `\u2705 <b>Photo de r\u00e9f\u00e9rence ajout\u00e9e !</b>`,
+        '',
+        `\ud83c\udff7\ufe0f Label : ${escapeHtml(label)}`,
+        `\ud83d\udcce Total : ${refCount} r\u00e9f\u00e9rence(s)`,
+        '',
+        '<i>Chaque nouvel article sera compar\u00e9 avec cette photo.</i>',
+      ].join('\n'), {
+        reply_markup: JSON.stringify({ inline_keyboard: [
+          [
+            { text: '\ud83d\udcf8 Voir tout', callback_data: 'act:photo_refresh' },
+            { text: '\ud83d\uddd1\ufe0f Supprimer', callback_data: `act:photo_del:${refId}` },
+          ],
+        ]}),
+      });
+    } catch (e) {
+      await this.sendMessage(chatId, `\u274c Erreur ajout r\u00e9f\u00e9rence : ${escapeHtml(e.message)}`);
+    }
   }
 
   /**
@@ -1460,6 +1595,12 @@ export class TelegramBot {
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
         break;
       }
+      case 'photo': {
+        // Can't edit message into /photo (which sends a new message),
+        // so send as new message and delete old
+        await this.cmdPhoto(chatId, {});
+        break;
+      }
       case 'countries': {
         const msg = formatCountries(this.config.countries || [], { withBack: true });
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
@@ -1677,6 +1818,19 @@ export class TelegramBot {
         await this.editMessage(chatId, messageId, this._formatTurboMsg(isActive), this._turboKeyboard(isActive));
         break;
       }
+      case 'photo_refresh': {
+        await this.cmdPhoto(chatId, {});
+        break;
+      }
+      case 'photo_clear': {
+        const imgS = this.sniper?.imageSearch;
+        if (imgS) {
+          const refs = imgS.getReferences?.() || [];
+          refs.forEach(r => imgS.removeReference(r.id));
+        }
+        await this.editMessage(chatId, messageId, '\ud83d\uddd1\ufe0f Toutes les r\u00e9f\u00e9rences photo supprim\u00e9es.', { inline_keyboard: [[backBtn]] });
+        break;
+      }
       case 'export_json':
       case 'export_csv': {
         const format = action.split('_')[1];
@@ -1689,6 +1843,21 @@ export class TelegramBot {
           }
         } else {
           await this.editMessage(chatId, messageId, '\u274c Module export non disponible.', { inline_keyboard: [[backBtn]] });
+        }
+        break;
+      }
+      default: {
+        // ── Dynamic photo actions ──
+        if (action.startsWith('photo_del:')) {
+          const refId = action.slice('photo_del:'.length);
+          this.sniper?.imageSearch?.removeReference(refId);
+          await this.editMessage(chatId, messageId, `\ud83d\uddd1\ufe0f R\u00e9f\u00e9rence supprim\u00e9e.`, { inline_keyboard: [[backBtn]] });
+        } else if (action.startsWith('photo_thr:')) {
+          const thr = parseInt(action.slice('photo_thr:'.length), 10) / 100;
+          if (this.sniper?.imageSearch) {
+            this.sniper.imageSearch.threshold = thr;
+          }
+          await this.editMessage(chatId, messageId, `\ud83c\udfaf Seuil de similarit\u00e9 mis \u00e0 <b>${Math.round(thr * 100)}%</b>`, { inline_keyboard: [[backBtn]] });
         }
         break;
       }
@@ -1739,6 +1908,8 @@ export class TelegramBot {
       priceFrom: null,
       priceTo: null,
       text: null,
+      // Photo references for visual search
+      photoRefs: [], // [{ url, fileId, label }]
       // Labels for display
       genderLabel: null,
       genderIcon: null,
@@ -1989,7 +2160,35 @@ export class TelegramBot {
         break;
       }
 
-      // ── STEP 8: Recap ──
+      // ── STEP 8: Photo reference (optional) ──
+      case 'photo': {
+        const photoCount = data.photoRefs?.length || 0;
+        const photoLines = photoCount > 0
+          ? data.photoRefs.map((p, i) => `  ${i + 1}. ${escapeHtml(p.label || 'Photo ' + (i + 1))}`).join('\n')
+          : '';
+
+        const buttons = [];
+        if (photoCount > 0) {
+          buttons.push([{ text: `\u2705 Continuer (${photoCount} photo${photoCount > 1 ? 's' : ''})`, callback_data: 'fw:ph:done' }]);
+          buttons.push([{ text: '\ud83d\uddd1\ufe0f Supprimer derni\u00e8re', callback_data: 'fw:ph:dellast' }]);
+        }
+        buttons.push([{ text: '\u23ed Passer', callback_data: 'fw:ph:skip' }]);
+
+        const prompt = [
+          `<b>\u00c9tape 8</b> \u2014 Photo de r\u00e9f\u00e9rence (optionnel) :`,
+          '',
+          '\ud83d\udcf8 <i>Envoie une ou plusieurs photos de l\'article recherch\u00e9.</i>',
+          '<i>Le bot comparera visuellement chaque nouvel article avec tes photos.</i>',
+          '',
+          photoCount > 0 ? `\ud83d\udcce <b>${photoCount} photo(s) ajout\u00e9e(s) :</b>\n${photoLines}` : '',
+        ].filter(Boolean).join('\n');
+
+        const msg = formatFilterWizard(data, step, stepNum, FILTER_TOTAL, { buttons, prompt });
+        await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
+        break;
+      }
+
+      // ── STEP 9: Recap ──
       case 'recap': {
         const msg = formatFilterRecap(data);
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
@@ -2231,7 +2430,22 @@ export class TelegramBot {
     if (action.startsWith('kw:')) {
       const val = action.split(':')[1];
       if (val === 'skip') {
+        conv.step = 'photo';
+        this.setConv(userId, conv);
+        await this.renderFilterStep(chatId, messageId, userId);
+      }
+      return;
+    }
+
+    // ── Photo step: skip/done/delete ──
+    if (action.startsWith('ph:')) {
+      const val = action.split(':')[1];
+      if (val === 'skip' || val === 'done') {
         conv.step = 'recap';
+        this.setConv(userId, conv);
+        await this.renderFilterStep(chatId, messageId, userId);
+      } else if (val === 'dellast') {
+        data.photoRefs.pop();
         this.setConv(userId, conv);
         await this.renderFilterStep(chatId, messageId, userId);
       }
@@ -2269,7 +2483,7 @@ export class TelegramBot {
     // Keywords input
     if (conv.step === 'keywords') {
       data.text = text;
-      conv.step = 'recap';
+      conv.step = 'photo';
       this.setConv(userId, conv);
       await this.renderFilterStep(chatId, messageId, userId);
       return;
@@ -2353,6 +2567,17 @@ export class TelegramBot {
       sizes: data.sizeLabels.length > 0 ? data.sizeLabels : undefined,
       conditions: data.conditionLabels.length > 0 ? data.conditionLabels : undefined,
     };
+
+    // Register photo references in ImageSearch (if any)
+    if (data.photoRefs?.length > 0 && this.sniper?.imageSearch) {
+      for (const photo of data.photoRefs) {
+        const refId = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+        this.sniper.imageSearch.addReference(refId, photo.url, photo.label).catch(e => {
+          log.warn(`Failed to add photo ref: ${e.message}`);
+        });
+      }
+      query._photoRefs = data.photoRefs.length;
+    }
 
     // Add to sniper
     if (this.sniper?.queries) {
