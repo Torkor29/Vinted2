@@ -167,6 +167,7 @@
       "enabled": true,
       "botToken": "7713748896:AAFP6cfpjy8miefpyMTAxg_7ZbhSv395iqY",
       "chatId": "-1003531112231",
+      "allowedUsers": [1075142256],
       "topicIds": {
         "feed": 27,
         "deals": 28,
