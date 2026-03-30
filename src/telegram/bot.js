@@ -892,19 +892,21 @@ export class TelegramBot {
     let fileUrl;
     try {
       const fileInfo = await this.apiCall('getFile', { file_id: fileId });
-      const filePath = fileInfo.result?.file_path;
-      if (!filePath) throw new Error('No file path');
-      fileUrl = `https://api.telegram.org/file/bot${this.token}/${filePath}`;
+      // apiCall returns data.result directly, so fileInfo IS the file object
+      const filePath = fileInfo?.file_path;
+      if (!filePath) throw new Error('No file path returned');
+      fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${filePath}`;
     } catch (e) {
-      await this.sendMessage(chatId, '\u274c Impossible de r\u00e9cup\u00e9rer la photo.');
+      log.error(`getFile failed: ${e.message}`);
+      await this.sendMessage(chatId, `\u274c Impossible de r\u00e9cup\u00e9rer la photo: ${e.message}`);
       return;
     }
 
-    const label = message.caption || '';
+    const caption = message.caption || '';
 
     // ── Route 1: Filter wizard photo step (full wizard) ──
     if (conv?.command === 'filter_wizard' && conv.step === 'photo') {
-      conv.data.photoRefs.push({ url: fileUrl, fileId, label: label || `Photo ${conv.data.photoRefs.length + 1}` });
+      conv.data.photoRefs.push({ url: fileUrl, fileId, label: caption || `Photo ${conv.data.photoRefs.length + 1}` });
       this.setConv(userId, conv);
       await this.renderFilterStep(chatId, conv.messageId, userId);
       await this.sendMessage(chatId, `\u2705 Photo ajout\u00e9e ! (${conv.data.photoRefs.length} au total)\nEnvoie d'autres ou clique Continuer.`);
@@ -913,12 +915,12 @@ export class TelegramBot {
 
     // ── Route 2: Photo mini-wizard already in progress (adding more photos) ──
     if (conv?.type === 'photo_wizard' && conv.step === 'photo') {
-      conv.photos.push({ url: fileUrl, fileId, label: label || `Photo ${conv.photos.length + 1}` });
+      conv.photos.push({ url: fileUrl, fileId, label: caption || `Photo ${conv.photos.length + 1}` });
       this.setConv(userId, conv);
       await this.sendMessage(chatId, [
         `\u2705 <b>${conv.photos.length} photo(s)</b> ajout\u00e9e(s)`,
         '',
-        'Envoie d\'autres photos ou clique sur un bouton :',
+        'Envoie d\'autres photos ou clique Continuer :',
       ].join('\n'), {
         reply_markup: JSON.stringify({ inline_keyboard: [
           [{ text: `\u27a1\ufe0f Continuer (${conv.photos.length} photo${conv.photos.length > 1 ? 's' : ''})`, callback_data: 'pwiz:next' }],
@@ -929,28 +931,107 @@ export class TelegramBot {
     }
 
     // ── Route 3: Start new photo mini-wizard ──
+    // If caption provided, try to parse it for brand/type/color
+    let parsed = null;
+    if (caption) {
+      try {
+        const { ListingGenerator } = await import('../crm/listing-generator.js');
+        const gen = new ListingGenerator();
+        parsed = gen.parseInput(caption);
+      } catch {}
+    }
+
     this.setConv(userId, {
       type: 'photo_wizard',
-      step: 'photo',
-      photos: [{ url: fileUrl, fileId, label: label || 'Photo 1' }],
+      step: caption ? 'confirm_parsed' : 'describe',
+      photos: [{ url: fileUrl, fileId, label: caption || 'Photo 1' }],
+      parsed,
+      caption,
       priceTo: null,
       size: null,
       chatId,
     });
 
-    await this.sendMessage(chatId, [
-      '\ud83d\udcf8 <b>Nouvelle recherche photo !</b>',
+    if (caption && parsed) {
+      // ── Caption provided: show what we understood ──
+      await this._showParsedPhoto(chatId, parsed, caption, 1);
+    } else {
+      // ── No caption: ask for a quick description ──
+      await this.sendMessage(chatId, [
+        '\ud83d\udcf8 <b>Photo re\u00e7ue !</b>',
+        '',
+        '\ud83d\udcdd <b>D\u00e9cris l\'article en quelques mots :</b>',
+        '<i>Ex: pull carhartt gris M</i>',
+        '<i>Ex: air max 90 blanc 42</i>',
+        '',
+        'Ou envoie d\'autres photos avant.',
+      ].join('\n'), {
+        reply_markup: JSON.stringify({ inline_keyboard: [
+          [{ text: '\u23ed Passer la description', callback_data: 'pwiz:skipdesc' }],
+          [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+        ]}),
+      });
+    }
+  }
+
+  /** Show the parsed analysis of a photo + caption. */
+  async _showParsedPhoto(chatId, parsed, caption, photoCount) {
+    const lines = [
+      '\ud83d\udcf8 <b>Photo re\u00e7ue !</b>',
       '',
-      '\u2705 Photo re\u00e7ue.',
-      '',
-      'Tu peux envoyer d\'autres photos du m\u00eame article,',
-      'ou continuer pour configurer les filtres :',
-    ].join('\n'), {
+      '\ud83e\udde0 <b>Voil\u00e0 ce que j\'ai compris :</b>',
+    ];
+    if (parsed.brand)     lines.push(`  \ud83c\udff7\ufe0f Marque : <b>${escapeHtml(parsed.brand)}</b>`);
+    if (parsed.typeLabel) lines.push(`  \ud83d\udc55 Type : <b>${escapeHtml(parsed.typeLabel)}</b>`);
+    if (parsed.color)     lines.push(`  \ud83c\udfa8 Couleur : <b>${escapeHtml(parsed.color)}</b>`);
+    if (parsed.size)      lines.push(`  \ud83d\udccf Taille : <b>${escapeHtml(parsed.size)}</b>`);
+    if (parsed.model)     lines.push(`  \ud83d\udc5f Mod\u00e8le : <b>${escapeHtml(parsed.model)}</b>`);
+
+    if (!parsed.brand && !parsed.typeLabel && !parsed.color) {
+      lines.push('  <i>Rien d\u00e9tect\u00e9 \u2014 ajoute plus de d\u00e9tails dans la description.</i>');
+    }
+
+    lines.push('');
+    lines.push(`\ud83d\udcce ${photoCount} photo(s)`);
+
+    await this.sendMessage(chatId, lines.join('\n'), {
       reply_markup: JSON.stringify({ inline_keyboard: [
-        [{ text: '\u27a1\ufe0f Continuer', callback_data: 'pwiz:next' }],
+        [{ text: '\u2705 Correct, continuer', callback_data: 'pwiz:next' }],
+        [{ text: '\u270f\ufe0f Corriger la description', callback_data: 'pwiz:redescribe' }],
         [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
       ]}),
     });
+  }
+
+  /** Show the price step (reusable). */
+  async _showPriceStep(chatId, messageId, conv) {
+    const p = conv.parsed;
+    const summaryParts = [];
+    if (p?.brand) summaryParts.push(p.brand);
+    if (p?.typeLabel) summaryParts.push(p.typeLabel);
+    if (p?.color) summaryParts.push(p.color);
+    const summary = summaryParts.length > 0 ? summaryParts.join(' \u00b7 ') : `${conv.photos.length} photo(s)`;
+
+    await this.editMessage(chatId, messageId, [
+      `\ud83d\udcf8 ${escapeHtml(summary)}`,
+      '',
+      '\ud83d\udcb0 <b>Prix maximum ?</b>',
+      '',
+      'Choisis un budget ou tape un montant :',
+    ].join('\n'), { inline_keyboard: [
+      [
+        { text: '10\u20ac', callback_data: 'pwiz:pr:10' },
+        { text: '20\u20ac', callback_data: 'pwiz:pr:20' },
+        { text: '30\u20ac', callback_data: 'pwiz:pr:30' },
+      ],
+      [
+        { text: '50\u20ac', callback_data: 'pwiz:pr:50' },
+        { text: '100\u20ac', callback_data: 'pwiz:pr:100' },
+        { text: '200\u20ac', callback_data: 'pwiz:pr:200' },
+      ],
+      [{ text: '\u23ed Pas de limite', callback_data: 'pwiz:pr:0' }],
+      [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+    ]});
   }
 
   /**
@@ -966,31 +1047,59 @@ export class TelegramBot {
       return;
     }
 
-    // ── "next" from photo step → ask price ──
-    if (action === 'next' && conv.step === 'photo') {
+    // ── "skipdesc" from describe step → go to price without description ──
+    if (action === 'skipdesc') {
       conv.step = 'price';
+      this.setConv(userId, conv);
+      await this._showPriceStep(chatId, messageId, conv);
+      return;
+    }
+
+    // ── "redescribe" from confirm step → go back to describe ──
+    if (action === 'redescribe') {
+      conv.step = 'describe';
+      this.setConv(userId, conv);
+      await this.editMessage(chatId, messageId, [
+        '\ud83d\udcdd <b>D\u00e9cris l\'article :</b>',
+        '<i>Ex: pull carhartt gris M</i>',
+      ].join('\n'), { inline_keyboard: [
+        [{ text: '\u23ed Passer', callback_data: 'pwiz:skipdesc' }],
+        [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
+      ]});
+      return;
+    }
+
+    // ── "next" from confirm_parsed → go to price with detected size pre-filled ──
+    if (action === 'next' && conv.step === 'confirm_parsed') {
+      conv.step = 'price';
+      this.setConv(userId, conv);
+      await this._showPriceStep(chatId, messageId, conv);
+      return;
+    }
+
+    // ── "next" from photo step → ask for description ──
+    if (action === 'next' && conv.step === 'photo') {
+      conv.step = 'describe';
       this.setConv(userId, conv);
 
       await this.editMessage(chatId, messageId, [
         `\ud83d\udcf8 <b>${conv.photos.length} photo(s)</b> enregistr\u00e9e(s)`,
         '',
-        '\ud83d\udcb0 <b>Prix maximum ?</b>',
-        '',
-        'Choisis un budget ou tape un montant :',
+        '\ud83d\udcdd <b>D\u00e9cris l\'article en quelques mots :</b>',
+        '<i>Ex: pull carhartt gris M</i>',
+        '<i>Ex: air max 90 blanc 42</i>',
       ].join('\n'), { inline_keyboard: [
-        [
-          { text: '10\u20ac', callback_data: 'pwiz:pr:10' },
-          { text: '20\u20ac', callback_data: 'pwiz:pr:20' },
-          { text: '30\u20ac', callback_data: 'pwiz:pr:30' },
-        ],
-        [
-          { text: '50\u20ac', callback_data: 'pwiz:pr:50' },
-          { text: '100\u20ac', callback_data: 'pwiz:pr:100' },
-          { text: '200\u20ac', callback_data: 'pwiz:pr:200' },
-        ],
-        [{ text: '\u23ed Pas de limite', callback_data: 'pwiz:pr:0' }],
+        [{ text: '\u23ed Passer la description', callback_data: 'pwiz:skipdesc' }],
         [{ text: '\u274c Annuler', callback_data: 'pwiz:cancel' }],
       ]});
+      return;
+    }
+
+    // ── "next" from describe step (should not happen, but just in case) ──
+    if (action === 'next' && conv.step === 'describe') {
+      conv.step = 'price';
+      this.setConv(userId, conv);
+      await this._showPriceStep(chatId, messageId, conv);
       return;
     }
 
@@ -1062,12 +1171,23 @@ export class TelegramBot {
         query.sizeIds = [SIZE_MAP[conv.size]];
       }
 
+      // Use parsed data for smarter search
+      const p = conv.parsed;
+      if (p?.brand) {
+        // Find brand ID from BRANDS constant if possible
+        const brandEntry = BRANDS.find(b => b.label.toLowerCase() === p.brand.toLowerCase());
+        if (brandEntry) query.brandIds = [String(brandEntry.id)];
+      }
+
       query._labels = {
+        brands: p?.brand ? [p.brand] : undefined,
         sizes: conv.size ? [conv.size] : undefined,
         photoRefs: conv.photos.length,
       };
       query._photoSearch = true;
-      query.text = conv.photos[0]?.label || '';
+      query.text = p?.brand
+        ? [p.brand, p.typeLabel, p.model].filter(Boolean).join(' ')
+        : (conv.caption || '');
 
       // Add to sniper queries
       if (this.sniper?.queries) {
@@ -1108,6 +1228,49 @@ export class TelegramBot {
   async handlePhotoWizardText(chatId, userId, text) {
     const conv = this.getConv(userId);
     if (!conv || conv.type !== 'photo_wizard') return false;
+
+    // ── Describe step: parse the text and show what we understood ──
+    if (conv.step === 'describe') {
+      try {
+        const { ListingGenerator } = await import('../crm/listing-generator.js');
+        const gen = new ListingGenerator();
+        conv.parsed = gen.parseInput(text);
+        conv.caption = text;
+      } catch {
+        conv.parsed = null;
+        conv.caption = text;
+      }
+      conv.step = 'confirm_parsed';
+      this.setConv(userId, conv);
+
+      if (conv.parsed && (conv.parsed.brand || conv.parsed.typeLabel || conv.parsed.color)) {
+        await this._showParsedPhoto(chatId, conv.parsed, text, conv.photos.length);
+      } else {
+        // Nothing detected, go straight to price
+        conv.step = 'price';
+        this.setConv(userId, conv);
+        await this.sendMessage(chatId, [
+          `\ud83d\udcf8 ${conv.photos.length} photo(s) \u00b7 \ud83d\udcdd "${escapeHtml(text)}"`,
+          '',
+          '\ud83d\udcb0 <b>Prix maximum ?</b>',
+        ].join('\n'), {
+          reply_markup: JSON.stringify({ inline_keyboard: [
+            [
+              { text: '10\u20ac', callback_data: 'pwiz:pr:10' },
+              { text: '20\u20ac', callback_data: 'pwiz:pr:20' },
+              { text: '30\u20ac', callback_data: 'pwiz:pr:30' },
+            ],
+            [
+              { text: '50\u20ac', callback_data: 'pwiz:pr:50' },
+              { text: '100\u20ac', callback_data: 'pwiz:pr:100' },
+              { text: '200\u20ac', callback_data: 'pwiz:pr:200' },
+            ],
+            [{ text: '\u23ed Pas de limite', callback_data: 'pwiz:pr:0' }],
+          ]}),
+        });
+      }
+      return true;
+    }
 
     if (conv.step === 'price') {
       const price = parseFloat(text.replace(',', '.'));
