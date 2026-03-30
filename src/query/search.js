@@ -87,7 +87,7 @@ export class VintedSearch {
    */
   async pollNewItems(country, query = {}) {
     // Always sort by newest to catch new listings
-    const searchQuery = { ...query, order: 'newest_first', page: 1, perPage: 24 };
+    const searchQuery = { ...query, order: 'newest_first', page: 1, perPage: 96 };
     const result = await this.search(country, searchQuery);
 
     if (result.error) return [];

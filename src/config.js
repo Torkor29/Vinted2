@@ -41,7 +41,7 @@ const defaults = {
   // ── Session management ──
   session: {
     maxRequestsPerSession: 80,
-    poolSizePerCountry: 5,       // 5 sessions per country (was 3)
+    poolSizePerCountry: 10,      // 10 sessions per country (supports 800ms polling)
     rotateOnConsecutiveEmpty: 3,
     rotateOnErrors: 5,
     healthCheckIntervalMs: 60_000,
@@ -69,7 +69,7 @@ const defaults = {
 
   // ── Scraper settings ──
   scraper: {
-    pollIntervalMs: 2_000,       // 2s default (can go to 1s with enough sessions)
+    pollIntervalMs: 800,         // 800ms aggressive polling (needs 10+ sessions)
     retryAttempts: 3,
     retryBackoffMs: 1_500,
     requestTimeoutMs: 10_000,    // 10s timeout (was 15s)
