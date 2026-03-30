@@ -462,11 +462,18 @@ export class TelegramBot {
             // ── AUTH: check user whitelist ──
             const userId = update.callback_query?.from?.id || update.message?.from?.id;
             if (!this.isUserAllowed(userId)) {
-              // /myid is the only command allowed for non-whitelisted users
-              if (update.message?.text?.trim() === '/myid') {
-                await this.sendMessage(update.message.chat.id, `\ud83d\udd11 Ton ID Telegram : <code>${userId}</code>`);
-              } else if (userId) {
-                log.debug(`Blocked user ${userId}`);
+              if (update.message?.text) {
+                const cmd = update.message.text.trim().split(/\s+/)[0].replace(/@\w+$/, '').toLowerCase();
+                const cid = update.message.chat.id;
+                if (cmd === '/start' || cmd === '/myid') {
+                  await this.sendMessage(cid, [
+                    `\ud83d\udd12 <b>Acc\u00e8s refus\u00e9</b>`,
+                    '',
+                    `Ton ID : <code>${userId}</code>`,
+                    '',
+                    `Envoie cet ID \u00e0 l'admin pour \u00eatre autoris\u00e9.`,
+                  ].join('\n'));
+                }
               }
               continue;
             }
@@ -528,9 +535,50 @@ export class TelegramBot {
    * Empty whitelist = public (anyone allowed).
    */
   isUserAllowed(userId) {
-    const allowed = this.config.notifications?.telegram?.allowedUsers || [];
-    if (allowed.length === 0) return true; // No whitelist = public
+    const allowed = this._getAllowedUsers();
+    if (allowed.length === 0) return true;
     return allowed.includes(userId);
+  }
+
+  /** First user in the whitelist is the admin. */
+  isAdmin(userId) {
+    const allowed = this._getAllowedUsers();
+    return allowed.length > 0 && allowed[0] === userId;
+  }
+
+  /** Get the allowedUsers array (from runtime config). */
+  _getAllowedUsers() {
+    return this.config.notifications?.telegram?.allowedUsers || [];
+  }
+
+  /** Add a user ID to the whitelist (runtime + persist). */
+  _addAllowedUser(id) {
+    const tg = this.config.notifications?.telegram;
+    if (!tg) return;
+    if (!tg.allowedUsers) tg.allowedUsers = [];
+    if (!tg.allowedUsers.includes(id)) {
+      tg.allowedUsers.push(id);
+      this._persistConfig();
+    }
+  }
+
+  /** Remove a user ID from the whitelist (runtime + persist). */
+  _removeAllowedUser(id) {
+    const tg = this.config.notifications?.telegram;
+    if (!tg?.allowedUsers) return;
+    tg.allowedUsers = tg.allowedUsers.filter(u => u !== id);
+    this._persistConfig();
+  }
+
+  /** Persist config.json to disk. */
+  _persistConfig() {
+    try {
+      const configPath = resolve('config.json');
+      writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
+      log.info('Config persisted to config.json');
+    } catch (e) {
+      log.warn(`Failed to persist config: ${e.message}`);
+    }
   }
 
   /** Gets the conversation state for a user. */
@@ -592,7 +640,17 @@ export class TelegramBot {
           await this.cmdPhoto(chatId, opts);
           break;
         case '/myid':
-          await this.sendMessage(chatId, `\ud83d\udd11 Ton ID Telegram : <code>${message.from.id}</code>\n\nAjoute cet ID dans <code>allowedUsers</code> pour autoriser quelqu'un.`, opts);
+          await this.sendMessage(chatId, `\ud83d\udd11 Ton ID : <code>${message.from.id}</code>`, opts);
+          break;
+        case '/adduser':
+          await this.cmdAddUser(chatId, args, userId, opts);
+          break;
+        case '/removeuser':
+        case '/deluser':
+          await this.cmdRemoveUser(chatId, args, userId, opts);
+          break;
+        case '/users':
+          await this.cmdListUsers(chatId, userId, opts);
           break;
         case '/watch_seller':
           await this.cmdWatchSeller(chatId, args, opts);
@@ -1091,6 +1149,76 @@ export class TelegramBot {
     }
 
     return false;
+  }
+
+  // ══════════════════════════════════════════
+  //  USER MANAGEMENT (admin only)
+  // ══════════════════════════════════════════
+
+  /** /adduser [id] — Admin adds a user to the whitelist. */
+  async cmdAddUser(chatId, args, userId, opts) {
+    if (!this.isAdmin(userId)) {
+      await this.sendMessage(chatId, '\ud83d\udd12 Seul l\'admin peut ajouter des utilisateurs.', opts);
+      return;
+    }
+    const targetId = parseInt(args[0], 10);
+    if (!targetId || isNaN(targetId)) {
+      await this.sendMessage(chatId, 'Usage: <code>/adduser 123456789</code>', opts);
+      return;
+    }
+    if (this.isUserAllowed(targetId)) {
+      await this.sendMessage(chatId, `\u26a0\ufe0f <code>${targetId}</code> est d\u00e9j\u00e0 autoris\u00e9.`, opts);
+      return;
+    }
+    this._addAllowedUser(targetId);
+    const total = this._getAllowedUsers().length;
+    await this.sendMessage(chatId, [
+      `\u2705 <b>Utilisateur ajout\u00e9 !</b>`,
+      '',
+      `ID : <code>${targetId}</code>`,
+      `Total : ${total} utilisateur(s) autoris\u00e9(s)`,
+    ].join('\n'), opts);
+  }
+
+  /** /removeuser [id] — Admin removes a user from the whitelist. */
+  async cmdRemoveUser(chatId, args, userId, opts) {
+    if (!this.isAdmin(userId)) {
+      await this.sendMessage(chatId, '\ud83d\udd12 Seul l\'admin peut retirer des utilisateurs.', opts);
+      return;
+    }
+    const targetId = parseInt(args[0], 10);
+    if (!targetId || isNaN(targetId)) {
+      await this.sendMessage(chatId, 'Usage: <code>/removeuser 123456789</code>', opts);
+      return;
+    }
+    if (targetId === userId) {
+      await this.sendMessage(chatId, '\u274c Tu ne peux pas te retirer toi-m\u00eame.', opts);
+      return;
+    }
+    this._removeAllowedUser(targetId);
+    await this.sendMessage(chatId, `\ud83d\uddd1\ufe0f Utilisateur <code>${targetId}</code> retir\u00e9.`, opts);
+  }
+
+  /** /users — Admin lists all whitelisted users. */
+  async cmdListUsers(chatId, userId, opts) {
+    if (!this.isAdmin(userId)) {
+      await this.sendMessage(chatId, '\ud83d\udd12 Seul l\'admin peut voir la liste.', opts);
+      return;
+    }
+    const allowed = this._getAllowedUsers();
+    if (allowed.length === 0) {
+      await this.sendMessage(chatId, '\ud83d\udd13 Mode public \u2014 tout le monde peut utiliser le bot.', opts);
+      return;
+    }
+    const lines = [
+      `\ud83d\udd12 <b>Utilisateurs autoris\u00e9s (${allowed.length})</b>`,
+      '',
+      ...allowed.map((id, i) => `  ${i === 0 ? '\ud83d\udc51' : '\ud83d\udc64'} <code>${id}</code>${i === 0 ? ' (admin)' : ''}`),
+      '',
+      '<code>/adduser [id]</code> \u2014 ajouter',
+      '<code>/removeuser [id]</code> \u2014 retirer',
+    ];
+    await this.sendMessage(chatId, lines.join('\n'), opts);
   }
 
   /**
