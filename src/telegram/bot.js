@@ -459,10 +459,21 @@ export class TelegramBot {
         for (const update of updates) {
           this.pollOffset = update.update_id + 1;
           try {
+            // ── AUTH: check user whitelist ──
+            const userId = update.callback_query?.from?.id || update.message?.from?.id;
+            if (!this.isUserAllowed(userId)) {
+              // /myid is the only command allowed for non-whitelisted users
+              if (update.message?.text?.trim() === '/myid') {
+                await this.sendMessage(update.message.chat.id, `\ud83d\udd11 Ton ID Telegram : <code>${userId}</code>`);
+              } else if (userId) {
+                log.debug(`Blocked user ${userId}`);
+              }
+              continue;
+            }
+
             if (update.callback_query) {
               await this.handleCallbackQuery(update.callback_query);
             } else if (update.message?.photo) {
-              // ── Photo received from user ──
               await this.handlePhotoMessage(update.message);
             } else if (update.message?.text) {
               const text = update.message.text.trim();
@@ -506,6 +517,16 @@ export class TelegramBot {
   // ══════════════════════════════════════════
   //  CONVERSATION STATE
   // ══════════════════════════════════════════
+
+  /**
+   * Checks if a Telegram user ID is allowed to use the bot.
+   * Empty whitelist = public (anyone allowed).
+   */
+  isUserAllowed(userId) {
+    const allowed = this.config.notifications?.telegram?.allowedUsers || [];
+    if (allowed.length === 0) return true; // No whitelist = public
+    return allowed.includes(userId);
+  }
 
   /** Gets the conversation state for a user. */
   getConv(userId) {
@@ -564,6 +585,9 @@ export class TelegramBot {
         case '/photo':
         case '/photos':
           await this.cmdPhoto(chatId, opts);
+          break;
+        case '/myid':
+          await this.sendMessage(chatId, `\ud83d\udd11 Ton ID Telegram : <code>${message.from.id}</code>\n\nAjoute cet ID dans <code>allowedUsers</code> pour autoriser quelqu'un.`, opts);
           break;
         case '/watch_seller':
           await this.cmdWatchSeller(chatId, args, opts);

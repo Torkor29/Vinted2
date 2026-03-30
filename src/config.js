@@ -171,6 +171,10 @@ const defaults = {
       enabled: false,
       botToken: '',
       chatId: '',
+      // Whitelist: only these Telegram user IDs can use the bot.
+      // Empty array = public (anyone can use it).
+      // To find your ID: send /myid to the bot or use @userinfobot
+      allowedUsers: [],
     },
     // Email (SMTP)
     email: {
