@@ -270,11 +270,11 @@ export const COLORS = [
 //  CONDITIONS (status_ids)
 // ══════════════════════════════════════════
 export const CONDITIONS = [
-  { id: 6, label: 'Neuf avec étiquette', short: 'Neuf+tag', icon: '🏷️' },
-  { id: 1, label: 'Neuf sans étiquette', short: 'Neuf', icon: '✨' },
-  { id: 2, label: 'Très bon état',       short: 'Très bon', icon: '👍' },
-  { id: 3, label: 'Bon état',            short: 'Bon', icon: '👌' },
-  { id: 4, label: 'Satisfaisant',        short: 'Satisf.', icon: '🔧' },
+  { id: 6, label: 'Neuf avec étiquette', short: 'Neuf+tag', icon: '🏷️', value: 'neuf_avec_etiquette' },
+  { id: 1, label: 'Neuf sans étiquette', short: 'Neuf', icon: '✨', value: 'neuf_sans_etiquette' },
+  { id: 2, label: 'Très bon état',       short: 'Très bon', icon: '👍', value: 'tres_bon_etat' },
+  { id: 3, label: 'Bon état',            short: 'Bon', icon: '👌', value: 'bon_etat' },
+  { id: 4, label: 'Satisfaisant',        short: 'Satisf.', icon: '🔧', value: 'satisfaisant' },
 ];
 
 // ══════════════════════════════════════════
