@@ -2225,11 +2225,6 @@ export class TelegramBot {
       } else {
         const parentId = parseInt(val, 10);
         if (parentId > 0) {
-          // Also select the parent category itself
-          if (!data.categoryIds.includes(parentId)) {
-            data.categoryIds.push(parentId);
-            data.categoryLabels.push(this.findCategoryLabel(data.genderId, parentId));
-          }
           data._catParent = parentId;
         }
       }
@@ -2277,6 +2272,7 @@ export class TelegramBot {
       }
       if (val === 'search') {
         // Switch to brand search text mode
+        data._brandSearch = null; // clear previous search
         this.setConv(userId, { ...conv, command: 'brand_search' });
         await this.editMessage(chatId, messageId,
           `\ud83d\udd0d <b>Recherche de marque</b>\n\nTape le nom de la marque :`,
@@ -2296,7 +2292,12 @@ export class TelegramBot {
           data.brandLabels.push(brand?.label || String(brandId));
         }
         this.setConv(userId, conv);
-        await this.renderFilterStep(chatId, messageId, userId);
+        // If we came from a search, re-render search results so user stays in search context
+        if (data._brandSearch) {
+          await this.handleBrandSearchText(chatId, userId, data._brandSearch);
+        } else {
+          await this.renderFilterStep(chatId, messageId, userId);
+        }
       }
       return;
     }
@@ -2444,6 +2445,9 @@ export class TelegramBot {
     const results = searchBrands(text);
     const { data, messageId } = conv;
 
+    // Store last search so brand toggles can re-render results
+    data._brandSearch = text;
+
     if (results.length === 0) {
       await this.editMessage(chatId, messageId,
         `\ud83d\udd0d Aucune marque trouv\u00e9e pour "<b>${escapeHtml(text)}</b>".\nR\u00e9essaie ou valide :`,
@@ -2467,6 +2471,15 @@ export class TelegramBot {
         return { text: `${selected ? '\u2705 ' : ''}${b.label}`, callback_data: `fw:br:${b.id}` };
       });
       buttons.push(row);
+    }
+    // Show already-selected brands that are NOT in search results as a summary row
+    const selectedNotInResults = data.brandIds.filter(id => !shown.some(b => b.id === id));
+    if (selectedNotInResults.length > 0) {
+      const selectedLabels = selectedNotInResults.map(id => {
+        const b = [...POPULAR_BRANDS, ...BRANDS].find(x => x.id === id);
+        return b?.label || String(id);
+      });
+      buttons.push([{ text: `✅ Déjà sélectionnés: ${selectedLabels.join(', ')}`, callback_data: 'fw:br:done' }]);
     }
     buttons.push([
       { text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' },
