@@ -165,6 +165,14 @@ export class VintedSearch {
         }
       }
 
+      // Catalog filter: if specific categories selected, reject items from other categories
+      if (query.catalogIds?.length > 0 && item.catalogId) {
+        if (!query.catalogIds.includes(item.catalogId) && !query.catalogIds.includes(String(item.catalogId))) {
+          log.debug(`Filtered out "${item.title}" — catalog ${item.catalogId} not in [${query.catalogIds}]`);
+          return false;
+        }
+      }
+
       return true;
     });
   }

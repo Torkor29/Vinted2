@@ -842,6 +842,7 @@ async function addSearchQuery(){
     });
   }
 
+  const hadAutobuy=abCheck?.checked;
   await api('POST','/queries',query);
   // Reset builder
   sel={gender:null,cats:[],brands:[],sizes:[],colors:[],conds:[]};
@@ -857,7 +858,7 @@ async function addSearchQuery(){
   // Flash confirmation
   const btn=document.querySelector('[onclick="addSearchQuery()"]');
   const orig=btn.textContent;
-  btn.textContent=abCheck?.checked?'✅ Filtre + Autobuy ajoutes !':'✅ Filtre ajoute !';
+  btn.textContent=hadAutobuy?'✅ Filtre + Autobuy ajoutes !':'✅ Filtre ajoute !';
   btn.style.background='var(--success)';
   setTimeout(()=>{btn.textContent=orig;btn.style.background=''},1500);
 }
