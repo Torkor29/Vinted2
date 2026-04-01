@@ -2654,10 +2654,10 @@ export class TelegramBot {
         }
       }
     } catch (e) {
-      this.log.warn('Brand API search failed, falling back to local catalog:', e.message);
+      log.warn('Brand API search failed, falling back to local catalog:', e.message);
     }
 
-    // Fallback to local catalog
+    // Fallback to local catalog (fuzzy matching)
     if (results.length === 0) {
       results = searchBrands(searchText);
     }
