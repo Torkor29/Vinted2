@@ -304,13 +304,17 @@ export class TelegramBot {
   }
 
   /**
-   * Checks if a topic still exists by attempting close+reopen.
+   * Checks if a topic still exists by sending an empty action (typing indicator).
+   * Much faster than close+reopen (1 API call instead of 2).
    */
   async topicExists(topicId, chatId = null) {
     const cid = chatId || this.chatId;
     try {
-      await this.apiCall('closeForumTopic', { chat_id: cid, message_thread_id: topicId });
-      await this.apiCall('reopenForumTopic', { chat_id: cid, message_thread_id: topicId });
+      await this.apiCall('sendChatAction', {
+        chat_id: cid,
+        message_thread_id: topicId,
+        action: 'typing',
+      });
       return true;
     } catch {
       return false;
@@ -600,11 +604,11 @@ export class TelegramBot {
               continue;
             }
 
-            // ── Auto-setup: if command comes from a new group, create topics ──
+            // ── Auto-setup: if command comes from a new group, create topics (non-blocking) ──
             const msgChatId = update.callback_query?.message?.chat?.id || update.message?.chat?.id;
             if (msgChatId && String(msgChatId).startsWith('-') && !this.groupTopics[String(msgChatId)]) {
-              log.info(`Nouveau groupe détecté: ${msgChatId}, setup des topics...`);
-              await this.ensureForumTopics(String(msgChatId));
+              log.info(`Nouveau groupe détecté: ${msgChatId}, setup des topics en arrière-plan...`);
+              this.ensureForumTopics(String(msgChatId)).catch(e => log.warn(`Auto-setup failed: ${e.message}`));
             }
 
             if (update.callback_query) {
@@ -1659,8 +1663,8 @@ export class TelegramBot {
 
     if (!data || !chatId) return;
 
-    // Always answer callback to clear the spinner
-    await this.apiCall('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
+    // Answer callback immediately (fire-and-forget — don't block the handler)
+    this.apiCall('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
 
     try {
       // ── Navigation ──
@@ -3251,6 +3255,8 @@ export class TelegramBot {
 
   /**
    * Processes the send queue with rate limiting.
+   * Telegram allows ~30 msg/s to groups, ~1 msg/s to same user.
+   * 50ms gap = ~20 msg/s (safe margin).
    */
   async processQueue() {
     if (this.processing) return;
@@ -3264,10 +3270,19 @@ export class TelegramBot {
         resolve(result);
       } catch (error) {
         this.stats.messagesFailed++;
-        log.error(`Queue: \u00e9chec ${method}: ${error.message}`);
-        reject(error);
+        // Handle Telegram rate limiting (429)
+        if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+          const retryAfter = parseInt(error.message.match(/retry after (\d+)/i)?.[1] || '2', 10);
+          log.warn(`Rate limited — pause ${retryAfter}s`);
+          await sleep(retryAfter * 1000);
+          // Re-queue the failed message at the front
+          this.sendQueue.unshift({ method, params, resolve, reject });
+        } else {
+          log.error(`Queue: échec ${method}: ${error.message}`);
+          reject(error);
+        }
       }
-      if (this.sendQueue.length > 0) await sleep(350);
+      if (this.sendQueue.length > 0) await sleep(50);
     }
 
     this.processing = false;
