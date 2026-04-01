@@ -296,10 +296,28 @@ export function getCategoriesForGender(genderId) {
   return CATEGORIES[genderId] || [];
 }
 
-/** Find brand by name (case-insensitive partial match) */
+/** Normalize a string for fuzzy brand matching (strip &, -, spaces, accents). */
+function normalizeBrand(str) {
+  return str
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+    .replace(/[&\-_.']/g, '')                          // strip special chars
+    .replace(/\s+/g, '');                               // strip spaces
+}
+
+/** Find brand by name (case-insensitive partial match with fuzzy normalization).
+ *  Matches both raw text and normalized text so "pull&bear", "pullbear",
+ *  "pull bear", "Pull & Bear" all find the same entry. */
 export function searchBrands(query) {
   const q = query.toLowerCase();
-  return BRANDS.filter(b => b.label.toLowerCase().includes(q));
+  const qNorm = normalizeBrand(query);
+
+  return BRANDS.filter(b => {
+    const label = b.label.toLowerCase();
+    const labelNorm = normalizeBrand(b.label);
+    // Match on raw text OR normalized text
+    return label.includes(q) || labelNorm.includes(qNorm) || qNorm.includes(labelNorm);
+  });
 }
 
 /** Get size group based on category */
