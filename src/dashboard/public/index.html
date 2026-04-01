@@ -123,6 +123,9 @@
     .brand-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
     .brand-tag{display:flex;align-items:center;gap:4px;padding:3px 8px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:20px;font-size:11px;color:var(--accent)}
     .brand-tag .x{cursor:pointer;font-weight:700}
+    .bq{padding:3px 8px;border-radius:14px;font-size:10px;cursor:pointer;border:1px solid var(--border);background:var(--bg4);color:var(--text2);transition:.15s;white-space:nowrap}
+    .bq:hover{border-color:var(--accent);color:var(--accent)}
+    .bq.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
 
     /* ── Query cards ── */
     .qcard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px;transition:.15s}
@@ -254,10 +257,12 @@
       <div class="sec">
         <div class="sec-t">🏷 Marques</div>
         <div class="brand-tags" id="brandTags"></div>
+        <div class="brand-quick" id="brandQuick" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
         <div class="brand-search">
-          <input id="brandInput" placeholder="Rechercher une marque..." oninput="filterBrands()" onfocus="filterBrands()">
+          <input id="brandInput" placeholder="Rechercher ou ajouter une marque..." oninput="filterBrands()" onfocus="filterBrands()">
           <div class="brand-results" id="brandResults"></div>
         </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:2px">Tape une marque + Entrée pour l'ajouter (même si pas dans la liste)</div>
       </div>
 
       <!-- Sizes -->
@@ -656,6 +661,7 @@ async function initCatalog(){
   renderColorSwatches();
   renderConditions();
   renderSizes('clothing');
+  renderBrandQuick();
 }
 
 function renderGenderPills(){
@@ -724,47 +730,113 @@ function renderSortOptions(){
   ).join('');
 }
 
-// Brand search — cache last matches for Enter-key support
+// ══════════ BRAND SYSTEM ══════════
+// Popular brands shown as quick-pick buttons
+const POPULAR_BRANDS=[
+  {id:53,label:'Nike'},{id:14,label:'Adidas'},{id:255,label:'Jordan'},
+  {id:2319,label:'New Balance'},{id:362,label:'The North Face'},{id:10,label:'Ralph Lauren'},
+  {id:73,label:'Lacoste'},{id:57,label:"Levi's"},{id:88,label:'Puma'},
+  {id:12,label:'Zara'},{id:105,label:'Gucci'},{id:52,label:'Louis Vuitton'},
+];
+
+// Custom brands saved by user (persisted in localStorage)
+function loadCustomBrands(){try{return JSON.parse(localStorage.getItem('customBrands')||'[]')}catch{return[]}}
+function saveCustomBrands(arr){localStorage.setItem('customBrands',JSON.stringify(arr))}
+
 let _brandMatches=[];
+
 function filterBrands(){
-  const q=document.getElementById('brandInput').value.toLowerCase();
+  const q=document.getElementById('brandInput').value.toLowerCase().trim();
   const res=document.getElementById('brandResults');
   if(!q){_brandMatches=[];res.classList.remove('show');return}
   _brandMatches=(cat.brands||[]).filter(b=>b.label.toLowerCase().includes(q)&&!sel.brands.find(x=>x.id===b.id)).slice(0,12);
-  res.innerHTML=_brandMatches.map(b=>`<div class="brand-opt" data-bid="${b.id}" data-blabel="${esc(b.label)}" onmousedown="addBrandById(${b.id})">${esc(b.label)}</div>`).join('');
+  res.innerHTML=_brandMatches.map(b=>`<div class="brand-opt" onmousedown="addBrandById(${b.id})">${esc(b.label)}</div>`).join('');
   res.classList.toggle('show',_brandMatches.length>0);
 }
+
 function addBrandById(id){
   const b=(cat.brands||[]).find(x=>x.id===id);
-  if(b&&!sel.brands.find(x=>x.id===id))sel.brands.push({id:b.id,label:b.label});
+  if(b&&!sel.brands.find(x=>x.id===id)){
+    sel.brands.push({id:b.id,label:b.label});
+  }
   document.getElementById('brandInput').value='';
   document.getElementById('brandResults').classList.remove('show');
   _brandMatches=[];
   renderBrandTags();
+  renderBrandQuick();
 }
-function addBrand(id,label){
-  if(!sel.brands.find(b=>b.id===id))sel.brands.push({id,label});
-  document.getElementById('brandInput').value='';
-  document.getElementById('brandResults').classList.remove('show');
-  _brandMatches=[];
+
+// Toggle a brand from quick-pick buttons
+function toggleBrandQuick(id,label){
+  const idx=sel.brands.findIndex(b=>b.id===id);
+  if(idx>=0){sel.brands.splice(idx,1)}else{sel.brands.push({id,label})}
   renderBrandTags();
+  renderBrandQuick();
 }
-// Enter key adds the first matching brand from dropdown
+
+// Add a manual brand (not in catalog) — uses negative ID to avoid collisions
+let _customIdCounter=-1;
+function addManualBrand(label){
+  if(!label||sel.brands.find(b=>b.label.toLowerCase()===label.toLowerCase()))return;
+  // Check catalog first
+  const found=(cat.brands||[]).find(b=>b.label.toLowerCase()===label.toLowerCase());
+  if(found){addBrandById(found.id);return}
+  // Custom brand — save for future quick-picks
+  const id=_customIdCounter--;
+  sel.brands.push({id,label,custom:true});
+  const customs=loadCustomBrands();
+  if(!customs.find(c=>c.label.toLowerCase()===label.toLowerCase())){
+    customs.push({id,label});
+    saveCustomBrands(customs);
+  }
+  renderBrandTags();
+  renderBrandQuick();
+}
+
+// Enter key: adds first match from dropdown, or adds as custom brand if no match
 document.getElementById('brandInput')?.addEventListener('keydown',e=>{
   if(e.key==='Enter'){
     e.preventDefault();
-    if(_brandMatches.length>0)addBrandById(_brandMatches[0].id);
+    if(_brandMatches.length>0){
+      addBrandById(_brandMatches[0].id);
+    }else{
+      const val=document.getElementById('brandInput').value.trim();
+      if(val)addManualBrand(val);
+      document.getElementById('brandInput').value='';
+      document.getElementById('brandResults').classList.remove('show');
+    }
   }
 });
+
 function removeBrand(id){
   sel.brands=sel.brands.filter(b=>b.id!==id);
   renderBrandTags();
+  renderBrandQuick();
 }
+
 function renderBrandTags(){
-  document.getElementById('brandTags').innerHTML=sel.brands.map(b=>
-    `<div class="brand-tag">${esc(b.label)} <span class="x" onclick="removeBrand(${b.id})">✕</span></div>`
-  ).join('');
+  document.getElementById('brandTags').innerHTML=sel.brands.map(b=>{
+    const icon=b.custom?'✏️ ':'';
+    return `<div class="brand-tag">${icon}${esc(b.label)} <span class="x" onclick="removeBrand(${b.id})">✕</span></div>`;
+  }).join('');
 }
+
+// Store quick-pick brands for click lookup
+let _quickBrands=[];
+function renderBrandQuick(){
+  const customs=loadCustomBrands();
+  _quickBrands=[...POPULAR_BRANDS];
+  customs.forEach(c=>{if(!_quickBrands.find(a=>a.label.toLowerCase()===c.label.toLowerCase()))_quickBrands.push(c)});
+  document.getElementById('brandQuick').innerHTML=_quickBrands.map((b,i)=>{
+    const on=sel.brands.find(x=>x.id===b.id||(x.label.toLowerCase()===b.label.toLowerCase()));
+    return `<div class="bq${on?' on':''}" onclick="toggleBrandIdx(${i})">${esc(b.label)}</div>`;
+  }).join('');
+}
+function toggleBrandIdx(i){
+  const b=_quickBrands[i];if(!b)return;
+  toggleBrandQuick(b.id,b.label);
+}
+
 document.addEventListener('click',e=>{if(!e.target.closest('.brand-search'))document.getElementById('brandResults').classList.remove('show')});
 
 function toggleArr(key,id){const a=sel[key];const i=a.indexOf(id);i>=0?a.splice(i,1):a.push(id)}
@@ -793,7 +865,7 @@ async function addSearchQuery(){
     text: text||undefined,
     genderId: sel.gender||undefined,
     catalogIds: finalCats.length?finalCats:sel.gender?[sel.gender]:undefined,
-    brandIds: sel.brands.length?sel.brands.map(b=>b.id):undefined,
+    brandIds: sel.brands.filter(b=>b.id>0).length?sel.brands.filter(b=>b.id>0).map(b=>b.id):undefined,
     sizeIds: sel.sizes.length?[...sel.sizes]:undefined,
     colorIds: sel.colors.length?[...sel.colors]:undefined,
     statusIds: sel.conds.length?[...sel.conds]:undefined,
@@ -852,7 +924,7 @@ async function addSearchQuery(){
   if(abCheck)abCheck.checked=false;
   document.getElementById('sq-autobuy-opts').style.display='none';
   document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
-  renderCategoryGrid();renderBrandTags();renderColorSwatches();renderConditions();renderSizes('clothing');
+  renderCategoryGrid();renderBrandTags();renderBrandQuick();renderColorSwatches();renderConditions();renderSizes('clothing');
   loadQueries();
   // Stay on search page so user can add more filters
   // Flash confirmation
