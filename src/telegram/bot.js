@@ -57,13 +57,14 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 /** Forum topic definitions — created once in the supergroup. */
 const TOPIC_DEFINITIONS = [
-  { key: 'feed',      name: '\ud83d\udce1 Feed',              iconColor: 0x6FB9F0 },
-  { key: 'deals',     name: '\ud83d\udc8e Deals',             iconColor: 0xFFD67E },
-  { key: 'achats',    name: '\ud83d\uded2 Achats',            iconColor: 0x8EEE98 },
-  { key: 'listings',  name: '\ud83c\udff7\ufe0f Mise en vente', iconColor: 0xCB86DB },
-  { key: 'compta',    name: '\ud83d\udcb0 Comptabilit\u00e9', iconColor: 0xFFD67E },
-  { key: 'stats',     name: '\ud83d\udcca Stats',             iconColor: 0x8EEE98 },
-  { key: 'alertes',   name: '\u26a0\ufe0f Alertes',           iconColor: 0xFF93B2 },
+  { key: 'feed',      name: '📡 Feed',              iconColor: 0x6FB9F0 },
+  { key: 'deals',     name: '💎 Deals',             iconColor: 0xFFD67E },
+  { key: 'achats',    name: '🛒 Achats',            iconColor: 0x8EEE98 },
+  { key: 'listings',  name: '🏷️ Mise en vente', iconColor: 0xCB86DB },
+  { key: 'compta',    name: '💰 Comptabilité', iconColor: 0xFFD67E },
+  { key: 'stats',     name: '📊 Stats',             iconColor: 0x8EEE98 },
+  { key: 'alertes',   name: '⚠️ Alertes',           iconColor: 0xFF93B2 },
+  { key: 'logs',      name: '🔧 Logs',              iconColor: 0x7B8389 },
 ];
 
 /** Steps for the filter creation wizard (order matters). */
@@ -173,6 +174,7 @@ export class TelegramBot {
 
       const startup = formatStartupMessage();
       await this.sendToTopic('feed', startup.text);
+      await this.logToTopic('info', `<b>Bot démarré</b> — @${me.username}`);
 
       log.info('Bot Telegram pret et en ecoute');
       return true;
@@ -207,11 +209,31 @@ export class TelegramBot {
 
   /**
    * Ensures all required forum topics exist in a supergroup.
+   * Uses TELEGRAM_TOPIC_IDS env var (JSON) to persist topic IDs across deploys
+   * on ephemeral filesystems like Render.
+   * Format: TELEGRAM_TOPIC_IDS={"feed":123,"deals":456,"logs":789,...}
    * @param {string} [targetChatId] - Chat ID to set up. Defaults to this.chatId (admin group).
    */
   async ensureForumTopics(targetChatId = null) {
     const chatId = targetChatId || this.chatId;
     if (!chatId) return;
+
+    // ── Load topic IDs from env var (survives Render redeploys) ──
+    if (!this.groupTopics[chatId] || Object.keys(this.groupTopics[chatId]).length === 0) {
+      const envTopics = process.env.TELEGRAM_TOPIC_IDS;
+      if (envTopics) {
+        try {
+          const parsed = JSON.parse(envTopics);
+          if (parsed && typeof parsed === 'object') {
+            this.groupTopics[chatId] = { ...parsed };
+            this.topicIds = { ...parsed };
+            log.info(`Topic IDs chargés depuis TELEGRAM_TOPIC_IDS: ${Object.keys(parsed).join(', ')}`);
+          }
+        } catch (e) {
+          log.warn(`TELEGRAM_TOPIC_IDS invalide (JSON attendu): ${e.message}`);
+        }
+      }
+    }
 
     try {
       const chat = await this.apiCall('getChat', { chat_id: chatId });
@@ -231,6 +253,7 @@ export class TelegramBot {
 
     for (const def of TOPIC_DEFINITIONS) {
       if (topics[def.key]) {
+        // Topic ID is known — verify it still exists (lightweight check)
         const exists = await this.topicExists(topics[def.key], chatId);
         if (exists) {
           log.debug(`Topic "${def.name}" OK dans ${chatId} (ID: ${topics[def.key]})`);
@@ -239,6 +262,7 @@ export class TelegramBot {
         log.warn(`Topic "${def.name}" disparu dans ${chatId}, recréation...`);
       }
 
+      // Only create if we truly don't have a valid ID
       try {
         const topic = await this.apiCall('createForumTopic', {
           chat_id: chatId,
@@ -259,7 +283,24 @@ export class TelegramBot {
       this.topicIds = { ...topics };
     }
 
-    if (changed) this.persistGroupTopics();
+    if (changed) {
+      this.persistGroupTopics();
+      // Log the topic IDs so user can set them as env var
+      log.info(`\n╔══════════════════════════════════════════════════╗`);
+      log.info(`║  TOPIC IDS — Copie cette valeur dans Render :    ║`);
+      log.info(`║  TELEGRAM_TOPIC_IDS=${JSON.stringify(topics)}`);
+      log.info(`╚══════════════════════════════════════════════════╝`);
+      // Also send to logs topic if available
+      if (topics.logs) {
+        try {
+          await this.sendToTopic('logs', 
+            `🔧 <b>Topic IDs mis à jour</b>\n\n` +
+            `Ajoute cette env var dans Render pour éviter les doublons :\n\n` +
+            `<code>TELEGRAM_TOPIC_IDS=${JSON.stringify(topics)}</code>`
+          );
+        } catch { /* best effort */ }
+      }
+    }
   }
 
   /**
@@ -311,6 +352,20 @@ export class TelegramBot {
    */
   getTopicsForGroup(chatId) {
     return this.groupTopics[chatId] || this.groupTopics[this.chatId] || this.topicIds || {};
+  }
+
+  /**
+   * Send a log message to the 🔧 Logs topic (best-effort, never throws).
+   * @param {string} level - 'info' | 'warn' | 'error'
+   * @param {string} message - Log message (HTML supported)
+   */
+  async logToTopic(level, message) {
+    const icons = { info: 'ℹ️', warn: '⚠️', error: '❌' };
+    const icon = icons[level] || '📝';
+    const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    try {
+      await this.sendToTopic('logs', `${icon} <code>${time}</code> ${message}`);
+    } catch { /* best effort — never crash for logging */ }
   }
 
   // ══════════════════════════════════════════
@@ -2652,14 +2707,22 @@ export class TelegramBot {
           results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
           apiWorked = true;
         }
+      } else {
+        await this.logToTopic('warn', `Recherche marque "<b>${escapeHtml(searchText)}</b>" — client API Vinted non disponible, fallback local`);
       }
     } catch (e) {
       log.warn('Brand API search failed, falling back to local catalog:', e.message);
+      await this.logToTopic('error', `API marque échouée pour "<b>${escapeHtml(searchText)}</b>": ${escapeHtml(e.message)}`);
     }
 
     // Fallback to local catalog (fuzzy matching)
     if (results.length === 0) {
       results = searchBrands(searchText);
+      if (results.length > 0) {
+        await this.logToTopic('info', `Marque "<b>${escapeHtml(searchText)}</b>" trouvée via catalogue local: ${results.map(r => r.label).join(', ')}`);
+      }
+    } else {
+      await this.logToTopic('info', `Marque "<b>${escapeHtml(searchText)}</b>" trouvée via API Vinted (${results.length} résultats)`);
     }
 
     // Store results for re-rendering after toggle
