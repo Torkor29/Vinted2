@@ -126,6 +126,9 @@
     .bq{padding:3px 8px;border-radius:14px;font-size:10px;cursor:pointer;border:1px solid var(--border);background:var(--bg4);color:var(--text2);transition:.15s;white-space:nowrap}
     .bq:hover{border-color:var(--accent);color:var(--accent)}
     .bq.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+    .bq-edit{display:inline-flex;align-items:center;gap:3px;padding:3px 6px 3px 8px;border-radius:14px;font-size:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);white-space:nowrap}
+    .bq-edit .bq-act{cursor:pointer;opacity:.5;transition:.15s;font-size:9px}
+    .bq-edit .bq-act:hover{opacity:1}
 
     /* ── Query cards ── */
     .qcard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px;transition:.15s}
@@ -255,9 +258,22 @@
 
       <!-- Brands -->
       <div class="sec">
-        <div class="sec-t">🏷 Marques</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div class="sec-t" style="margin:0">🏷 Marques</div>
+          <span id="brandEditBtn" style="font-size:10px;color:var(--accent);cursor:pointer" onclick="toggleBrandEdit()">⚙️ Gérer</span>
+        </div>
         <div class="brand-tags" id="brandTags"></div>
         <div class="brand-quick" id="brandQuick" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
+        <!-- Edit mode panel (hidden by default) -->
+        <div id="brandEditPanel" style="display:none;padding:8px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:8px">
+          <div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:6px">Favoris — clic sur ✕ pour supprimer, ✏️ pour renommer</div>
+          <div id="brandEditList" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input id="brandFavInput" placeholder="Ajouter un favori..." style="flex:1;font-size:11px" oninput="filterBrandsFav()" onfocus="filterBrandsFav()">
+            <button class="btn" style="padding:4px 10px;font-size:10px" onclick="addFavFromInput()">+ Ajouter</button>
+          </div>
+          <div class="brand-results" id="brandFavResults" style="position:relative"></div>
+        </div>
         <div class="brand-search">
           <input id="brandInput" placeholder="Rechercher ou ajouter une marque..." oninput="filterBrands()" onfocus="filterBrands()">
           <div class="brand-results" id="brandResults"></div>
@@ -731,20 +747,24 @@ function renderSortOptions(){
 }
 
 // ══════════ BRAND SYSTEM ══════════
-// Popular brands shown as quick-pick buttons
-const POPULAR_BRANDS=[
+// Default popular brands
+const DEFAULT_BRANDS=[
   {id:53,label:'Nike'},{id:14,label:'Adidas'},{id:255,label:'Jordan'},
   {id:2319,label:'New Balance'},{id:362,label:'The North Face'},{id:10,label:'Ralph Lauren'},
   {id:73,label:'Lacoste'},{id:57,label:"Levi's"},{id:88,label:'Puma'},
   {id:12,label:'Zara'},{id:105,label:'Gucci'},{id:52,label:'Louis Vuitton'},
 ];
 
-// Custom brands saved by user (persisted in localStorage)
-function loadCustomBrands(){try{return JSON.parse(localStorage.getItem('customBrands')||'[]')}catch{return[]}}
-function saveCustomBrands(arr){localStorage.setItem('customBrands',JSON.stringify(arr))}
+// Favorites = user's personalized brand list (localStorage)
+function loadFavBrands(){
+  try{const d=JSON.parse(localStorage.getItem('favBrands')||'null');return d||[...DEFAULT_BRANDS]}catch{return[...DEFAULT_BRANDS]}
+}
+function saveFavBrands(arr){localStorage.setItem('favBrands',JSON.stringify(arr))}
 
 let _brandMatches=[];
+let _brandEditMode=false;
 
+// ── Search dropdown (for adding to current filter) ──
 function filterBrands(){
   const q=document.getElementById('brandInput').value.toLowerCase().trim();
   const res=document.getElementById('brandResults');
@@ -756,50 +776,37 @@ function filterBrands(){
 
 function addBrandById(id){
   const b=(cat.brands||[]).find(x=>x.id===id);
-  if(b&&!sel.brands.find(x=>x.id===id)){
-    sel.brands.push({id:b.id,label:b.label});
-  }
+  if(b&&!sel.brands.find(x=>x.id===id)) sel.brands.push({id:b.id,label:b.label});
   document.getElementById('brandInput').value='';
   document.getElementById('brandResults').classList.remove('show');
   _brandMatches=[];
-  renderBrandTags();
-  renderBrandQuick();
+  renderBrandTags();renderBrandQuick();
 }
 
 // Toggle a brand from quick-pick buttons
 function toggleBrandQuick(id,label){
-  const idx=sel.brands.findIndex(b=>b.id===id);
+  const idx=sel.brands.findIndex(b=>b.id===id||b.label.toLowerCase()===label.toLowerCase());
   if(idx>=0){sel.brands.splice(idx,1)}else{sel.brands.push({id,label})}
-  renderBrandTags();
-  renderBrandQuick();
+  renderBrandTags();renderBrandQuick();
 }
 
-// Add a manual brand (not in catalog) — uses negative ID to avoid collisions
+// Manual brand entry — checks catalog first, then adds as custom
 let _customIdCounter=-1;
 function addManualBrand(label){
   if(!label||sel.brands.find(b=>b.label.toLowerCase()===label.toLowerCase()))return;
-  // Check catalog first
   const found=(cat.brands||[]).find(b=>b.label.toLowerCase()===label.toLowerCase());
   if(found){addBrandById(found.id);return}
-  // Custom brand — save for future quick-picks
   const id=_customIdCounter--;
   sel.brands.push({id,label,custom:true});
-  const customs=loadCustomBrands();
-  if(!customs.find(c=>c.label.toLowerCase()===label.toLowerCase())){
-    customs.push({id,label});
-    saveCustomBrands(customs);
-  }
-  renderBrandTags();
-  renderBrandQuick();
+  renderBrandTags();renderBrandQuick();
 }
 
-// Enter key: adds first match from dropdown, or adds as custom brand if no match
+// Enter key: first match from dropdown, or manual add
 document.getElementById('brandInput')?.addEventListener('keydown',e=>{
   if(e.key==='Enter'){
     e.preventDefault();
-    if(_brandMatches.length>0){
-      addBrandById(_brandMatches[0].id);
-    }else{
+    if(_brandMatches.length>0){addBrandById(_brandMatches[0].id)}
+    else{
       const val=document.getElementById('brandInput').value.trim();
       if(val)addManualBrand(val);
       document.getElementById('brandInput').value='';
@@ -810,8 +817,7 @@ document.getElementById('brandInput')?.addEventListener('keydown',e=>{
 
 function removeBrand(id){
   sel.brands=sel.brands.filter(b=>b.id!==id);
-  renderBrandTags();
-  renderBrandQuick();
+  renderBrandTags();renderBrandQuick();
 }
 
 function renderBrandTags(){
@@ -821,23 +827,100 @@ function renderBrandTags(){
   }).join('');
 }
 
-// Store quick-pick brands for click lookup
+// ── Quick-pick grid ──
 let _quickBrands=[];
 function renderBrandQuick(){
-  const customs=loadCustomBrands();
-  _quickBrands=[...POPULAR_BRANDS];
-  customs.forEach(c=>{if(!_quickBrands.find(a=>a.label.toLowerCase()===c.label.toLowerCase()))_quickBrands.push(c)});
+  _quickBrands=loadFavBrands();
   document.getElementById('brandQuick').innerHTML=_quickBrands.map((b,i)=>{
     const on=sel.brands.find(x=>x.id===b.id||(x.label.toLowerCase()===b.label.toLowerCase()));
     return `<div class="bq${on?' on':''}" onclick="toggleBrandIdx(${i})">${esc(b.label)}</div>`;
   }).join('');
 }
-function toggleBrandIdx(i){
-  const b=_quickBrands[i];if(!b)return;
-  toggleBrandQuick(b.id,b.label);
+function toggleBrandIdx(i){const b=_quickBrands[i];if(b)toggleBrandQuick(b.id,b.label)}
+
+// ── Edit mode (manage favorites) ──
+function toggleBrandEdit(){
+  _brandEditMode=!_brandEditMode;
+  document.getElementById('brandEditPanel').style.display=_brandEditMode?'block':'none';
+  document.getElementById('brandEditBtn').textContent=_brandEditMode?'✅ Terminé':'⚙️ Gérer';
+  if(_brandEditMode)renderBrandEditList();
 }
 
-document.addEventListener('click',e=>{if(!e.target.closest('.brand-search'))document.getElementById('brandResults').classList.remove('show')});
+function renderBrandEditList(){
+  const favs=loadFavBrands();
+  document.getElementById('brandEditList').innerHTML=favs.map((b,i)=>
+    `<div class="bq-edit"><span>${esc(b.label)}</span>`+
+    `<span class="bq-act" onclick="renameFav(${i})" title="Renommer">✏️</span>`+
+    `<span class="bq-act" onclick="deleteFav(${i})" title="Supprimer">✕</span></div>`
+  ).join('')+(!favs.length?'<span style="font-size:10px;color:var(--text3)">Aucun favori</span>':'');
+}
+
+function deleteFav(i){
+  const favs=loadFavBrands();
+  if(i>=0&&i<favs.length){favs.splice(i,1);saveFavBrands(favs)}
+  renderBrandEditList();renderBrandQuick();
+}
+
+function renameFav(i){
+  const favs=loadFavBrands();
+  if(i<0||i>=favs.length)return;
+  const nv=prompt('Nouveau nom :',favs[i].label);
+  if(nv&&nv.trim()){favs[i].label=nv.trim();saveFavBrands(favs)}
+  renderBrandEditList();renderBrandQuick();
+}
+
+// Search in edit mode to add new favorites
+let _favMatches=[];
+function filterBrandsFav(){
+  const q=document.getElementById('brandFavInput').value.toLowerCase().trim();
+  const res=document.getElementById('brandFavResults');
+  if(!q){_favMatches=[];res.classList.remove('show');return}
+  const favs=loadFavBrands();
+  _favMatches=(cat.brands||[]).filter(b=>b.label.toLowerCase().includes(q)&&!favs.find(f=>f.id===b.id)).slice(0,8);
+  res.innerHTML=_favMatches.map(b=>`<div class="brand-opt" onmousedown="addFavBrand(${b.id})">${esc(b.label)}</div>`).join('');
+  res.classList.toggle('show',_favMatches.length>0);
+}
+
+function addFavBrand(id){
+  const b=(cat.brands||[]).find(x=>x.id===id);
+  if(!b)return;
+  const favs=loadFavBrands();
+  if(!favs.find(f=>f.id===id)){favs.push({id:b.id,label:b.label});saveFavBrands(favs)}
+  document.getElementById('brandFavInput').value='';
+  document.getElementById('brandFavResults').classList.remove('show');
+  _favMatches=[];
+  renderBrandEditList();renderBrandQuick();
+}
+
+function addFavFromInput(){
+  const inp=document.getElementById('brandFavInput');
+  const val=inp.value.trim();
+  if(!val)return;
+  // Check catalog
+  const found=(cat.brands||[]).find(b=>b.label.toLowerCase()===val.toLowerCase());
+  if(found){addFavBrand(found.id);return}
+  // Custom fav
+  const favs=loadFavBrands();
+  if(!favs.find(f=>f.label.toLowerCase()===val.toLowerCase())){
+    favs.push({id:_customIdCounter--,label:val});
+    saveFavBrands(favs);
+  }
+  inp.value='';
+  document.getElementById('brandFavResults').classList.remove('show');
+  renderBrandEditList();renderBrandQuick();
+}
+
+document.getElementById('brandFavInput')?.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();
+    if(_favMatches.length>0)addFavBrand(_favMatches[0].id);
+    else addFavFromInput();
+  }
+});
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.brand-search'))document.getElementById('brandResults').classList.remove('show');
+  if(!e.target.closest('#brandEditPanel'))document.getElementById('brandFavResults')?.classList.remove('show');
+});
 
 function toggleArr(key,id){const a=sel[key];const i=a.indexOf(id);i>=0?a.splice(i,1):a.push(id)}
 
