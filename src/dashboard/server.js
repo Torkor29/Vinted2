@@ -87,6 +87,23 @@ export class Dashboard {
       res.json(getAllCatalogData());
     });
 
+    // Brand search via Vinted API (returns correct brand IDs)
+    this.app.get('/api/brands/search', async (req, res) => {
+      const q = req.query.q;
+      if (!q || q.length < 2) return res.json([]);
+      try {
+        const client = this.modules.sniper?.search?.client;
+        const country = this.modules.sniper?.fullConfig?.countries?.[0] || 'fr';
+        if (!client) return res.json(getAllCatalogData().brands.filter(b => b.label.toLowerCase().includes(q.toLowerCase())).slice(0, 20));
+        const result = await client.request(country, '/catalog/brands', { params: { query: q, per_page: 20 } });
+        const brands = (result?.brands || result?.data?.brands || []).map(b => ({ id: b.id, label: b.title || b.name || b.label }));
+        res.json(brands.length ? brands : getAllCatalogData().brands.filter(b => b.label.toLowerCase().includes(q.toLowerCase())).slice(0, 20));
+      } catch {
+        // Fallback to local catalog
+        res.json(getAllCatalogData().brands.filter(b => b.label.toLowerCase().includes(q.toLowerCase())).slice(0, 20));
+      }
+    });
+
     // Stats
     this.app.get('/api/stats', (req, res) => {
       res.json(this.getFullStats());
