@@ -22,6 +22,7 @@ import {
   CATEGORIES,
   BRANDS,
   SIZES,
+  COLORS,
   CONDITIONS,
   searchBrands,
   getSizeGroup,
@@ -66,7 +67,7 @@ const TOPIC_DEFINITIONS = [
 ];
 
 /** Steps for the filter creation wizard (order matters). */
-const FILTER_STEPS = ['gender', 'categories', 'brands', 'sizes', 'conditions', 'price', 'keywords', 'recap'];
+const FILTER_STEPS = ['gender', 'categories', 'brands', 'sizes', 'colors', 'conditions', 'price', 'keywords', 'recap'];
 const FILTER_TOTAL = FILTER_STEPS.length;
 
 /** Popular brands shown as quick-pick buttons (top 12). */
@@ -2000,6 +2001,7 @@ export class TelegramBot {
       categoryIds: [],
       brandIds: [],
       sizeIds: [],
+      colorIds: [],
       conditionIds: [],
       priceFrom: null,
       priceTo: null,
@@ -2010,6 +2012,7 @@ export class TelegramBot {
       categoryLabels: [],
       brandLabels: [],
       sizeLabels: [],
+      colorLabels: [],
       conditionLabels: [],
     };
 
@@ -2183,7 +2186,35 @@ export class TelegramBot {
         break;
       }
 
-      // ── STEP 5: Conditions ──
+      // ── STEP 5: Colors ──
+      case 'colors': {
+        const buttons = [];
+        for (let i = 0; i < COLORS.length; i += 3) {
+          const row = COLORS.slice(i, i + 3).map(c => {
+            const selected = data.colorIds.includes(c.id);
+            return { text: `${selected ? '✅ ' : ''}${c.label}`, callback_data: `fw:cl:${c.id}` };
+          });
+          buttons.push(row);
+        }
+        buttons.push([
+          { text: '↩️ Retour', callback_data: 'fw:back' },
+          { text: '✅ Valider ▶️', callback_data: 'fw:cl:done' },
+          { text: '⏭ Passer (toutes)', callback_data: 'fw:cl:skip' },
+        ]);
+
+        let colorPrompt = '<b>Étape 5</b> — Couleurs (multi-sélection) :\n<i>Passer = toutes les couleurs</i>';
+        if (data.colorIds.length > 0) {
+          colorPrompt += `\n\n✅ <b>${data.colorLabels.join(', ')}</b>`;
+        }
+        const msg = formatFilterWizard(data, step, stepNum, FILTER_TOTAL, {
+          buttons,
+          prompt: colorPrompt,
+        });
+        await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
+        break;
+      }
+
+      // ── STEP 6: Conditions ──
       case 'conditions': {
         const buttons = [];
         const condRow = CONDITIONS.map(c => {
@@ -2200,7 +2231,7 @@ export class TelegramBot {
           { text: '⏭ Passer', callback_data: 'fw:co:skip' },
         ]);
 
-        let condPrompt = '<b>Étape 5</b> — État (multi-sélection) :';
+        let condPrompt = '<b>Étape 6</b> — État (multi-sélection) :';
         if (data.conditionIds.length > 0) {
           condPrompt += `\n\n✅ <b>${data.conditionLabels.join(', ')}</b>`;
         }
@@ -2212,7 +2243,7 @@ export class TelegramBot {
         break;
       }
 
-      // ── STEP 6: Price ──
+      // ── STEP 7: Price ──
       case 'price': {
         const buttons = [
           [
@@ -2234,13 +2265,13 @@ export class TelegramBot {
 
         const msg = formatFilterWizard(data, step, stepNum, FILTER_TOTAL, {
           buttons,
-          prompt: '<b>\u00c9tape 6</b> \u2014 Prix maximum :',
+          prompt: '<b>\u00c9tape 7</b> \u2014 Prix maximum :',
         });
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
         break;
       }
 
-      // ── STEP 7: Keywords ──
+      // ── STEP 8: Keywords ──
       case 'keywords': {
         const buttons = [
           [{ text: '\u23ed Passer', callback_data: 'fw:kw:skip' }],
@@ -2248,13 +2279,13 @@ export class TelegramBot {
 
         const msg = formatFilterWizard(data, step, stepNum, FILTER_TOTAL, {
           buttons,
-          prompt: '<b>\u00c9tape 7</b> \u2014 Mots-cl\u00e9s (optionnel) :\n<i>Tape tes mots-cl\u00e9s ou clique Passer</i>',
+          prompt: '<b>\u00c9tape 8</b> \u2014 Mots-cl\u00e9s (optionnel) :\n<i>Tape tes mots-cl\u00e9s ou clique Passer</i>',
         });
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
         break;
       }
 
-      // ── STEP 8: Recap ──
+      // ── STEP 9: Recap ──
       case 'recap': {
         const msg = formatFilterRecap(data);
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
@@ -2413,7 +2444,7 @@ export class TelegramBot {
     if (action.startsWith('sz:')) {
       const val = action.split(':')[1];
       if (val === 'done' || val === 'skip') {
-        conv.step = 'conditions';
+        conv.step = 'colors';
         this.setConv(userId, conv);
         await this.renderFilterStep(chatId, messageId, userId);
         return;
@@ -2429,6 +2460,32 @@ export class TelegramBot {
           const allSizes = [...SIZES.clothing, ...SIZES.shoes_men, ...SIZES.shoes_women, ...SIZES.jeans];
           const size = allSizes.find(s => s.id === sizeId);
           data.sizeLabels.push(size?.label || String(sizeId));
+        }
+        this.setConv(userId, conv);
+        await this.renderFilterStep(chatId, messageId, userId);
+      }
+      return;
+    }
+
+    // ── Color toggle/done/skip ──
+    if (action.startsWith('cl:')) {
+      const val = action.split(':')[1];
+      if (val === 'done' || val === 'skip') {
+        conv.step = 'conditions';
+        this.setConv(userId, conv);
+        await this.renderFilterStep(chatId, messageId, userId);
+        return;
+      }
+      const colorId = parseInt(val, 10);
+      if (colorId > 0) {
+        const idx = data.colorIds.indexOf(colorId);
+        if (idx >= 0) {
+          data.colorIds.splice(idx, 1);
+          data.colorLabels.splice(idx, 1);
+        } else {
+          data.colorIds.push(colorId);
+          const color = COLORS.find(c => c.id === colorId);
+          data.colorLabels.push(color?.label || String(colorId));
         }
         this.setConv(userId, conv);
         await this.renderFilterStep(chatId, messageId, userId);
@@ -2607,6 +2664,7 @@ export class TelegramBot {
     if (data.categoryIds.length > 0) query.catalogIds = data.categoryIds.map(String);
     if (data.brandIds.length > 0) query.brandIds = data.brandIds.map(String);
     if (data.sizeIds.length > 0) query.sizeIds = data.sizeIds.map(String);
+    if (data.colorIds?.length > 0) query.colorIds = data.colorIds.map(String);
     if (data.conditionIds.length > 0) query.statusIds = data.conditionIds.map(String);
     if (data.priceTo) query.priceTo = data.priceTo;
     if (data.priceFrom) query.priceFrom = data.priceFrom;
@@ -2617,6 +2675,7 @@ export class TelegramBot {
       categories: data.categoryLabels.length > 0 ? data.categoryLabels : undefined,
       brands: data.brandLabels.length > 0 ? data.brandLabels : undefined,
       sizes: data.sizeLabels.length > 0 ? data.sizeLabels : undefined,
+      colors: data.colorLabels?.length > 0 ? data.colorLabels : undefined,
       conditions: data.conditionLabels.length > 0 ? data.conditionLabels : undefined,
     };
 
@@ -3194,6 +3253,7 @@ function buildFilterSummaryText(data) {
   if (data.categoryLabels?.length) lines.push(`\ud83d\udce6 ${data.categoryLabels.map(escapeHtml).join(', ')}`);
   if (data.brandLabels?.length) lines.push(`\ud83c\udff7 ${data.brandLabels.map(escapeHtml).join(', ')}`);
   if (data.sizeLabels?.length) lines.push(`\ud83d\udccf ${data.sizeLabels.map(escapeHtml).join(', ')}`);
+  if (data.colorLabels?.length) lines.push(`\ud83c\udfa8 ${data.colorLabels.map(escapeHtml).join(', ')}`);
   if (data.conditionLabels?.length) lines.push(`\u2728 ${data.conditionLabels.map(escapeHtml).join(', ')}`);
   if (data.priceTo || data.priceFrom) {
     let p = '\ud83d\udcb0 ';
