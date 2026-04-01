@@ -258,8 +258,8 @@ class VintedSniper {
         workerDelayMs: turboConf.workerDelayMs || 200,
         staggerMs: turboConf.staggerMs || 50,
         onNewItems: async (newItems, country, query) => {
-          // Process each item through the same pipeline
-          await this._processNewItems(newItems, country);
+          // Process each item through the same pipeline, with query for routing
+          await this._processNewItems(newItems, country, query);
         },
       });
 
@@ -313,8 +313,11 @@ class VintedSniper {
   /**
    * Process new items through the full pipeline.
    * Shared by both TurboPoller and standard mode.
+   * @param {object[]} newItems - Normalized items
+   * @param {string} country - Country code
+   * @param {object} [query] - Source query (used for routing notifications to the right group)
    */
-  async _processNewItems(newItems, country) {
+  async _processNewItems(newItems, country, query = null) {
     if (!this.countryStats[country]) {
       this.countryStats[country] = { items: 0, errors: 0, lastPoll: null };
     }
@@ -346,30 +349,31 @@ class VintedSniper {
     }
 
     // 3. Autobuy FIRST (time-sensitive)
+    const targetChatId = query?._chatId || null;
     if (config.autobuy.enabled) {
       for (const item of newItems) {
         const result = await this.autoBuyer.tryBuy(country, item);
         if (result.purchased) {
           log.info(`AUTO-PURCHASED: "${item.title}" for ${item.price}EUR`);
           const crmEntry = this.crm.addPurchase(item, result.record);
-          if (this.telegramBot) this.telegramBot.notifyAutobuy(item, result.record).catch(() => {});
+          if (this.telegramBot) this.telegramBot.notifyAutobuy(item, result.record, targetChatId).catch(() => {});
           if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
         } else if (result.dryRun) {
           const crmEntry = this.crm.addPurchase(item, { ...result, dryRun: true, rule: result.matchedRule });
-          if (this.telegramBot) this.telegramBot.notifyAutobuy(item, { dryRun: true, rule: result.matchedRule }).catch(() => {});
+          if (this.telegramBot) this.telegramBot.notifyAutobuy(item, { dryRun: true, rule: result.matchedRule }, targetChatId).catch(() => {});
           if (config.dashboard.enabled) this.dashboard.broadcast('crm:new', crmEntry);
         }
       }
     }
 
-    // 4. Notifications (fire-and-forget)
+    // 4. Notifications — routed to the group that owns the query
     const notifPromises = newItems.map(item => {
       const promises = [];
       if (this.telegramBot) {
         if (item.dealScore >= 70) {
-          promises.push(this.telegramBot.notifyDeal(item).catch(() => {}));
+          promises.push(this.telegramBot.notifyDeal(item, targetChatId).catch(() => {}));
         } else {
-          promises.push(this.telegramBot.notifyNewItem(item).catch(() => {}));
+          promises.push(this.telegramBot.notifyNewItem(item, targetChatId).catch(() => {}));
         }
       }
       promises.push(this.notifier.notifyNewItem(item).catch(() => {}));
@@ -397,7 +401,7 @@ class VintedSniper {
     try {
       const newItems = await this.search.pollNewItems(country, query);
       if (newItems.length > 0) {
-        await this._processNewItems(newItems, country);
+        await this._processNewItems(newItems, country, query);
       }
     } catch (error) {
       this.countryStats[country].errors++;

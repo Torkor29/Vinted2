@@ -1,7 +1,20 @@
 import { createLogger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
+import { CATEGORIES } from '../data/vinted-catalog.js';
 
 const log = createLogger('query');
+
+// Build a set of all catalog IDs that belong to each gender (for post-filtering)
+const GENDER_CATALOG_IDS = {};
+for (const [genderId, cats] of Object.entries(CATEGORIES)) {
+  const ids = new Set();
+  ids.add(Number(genderId));
+  for (const cat of cats) {
+    ids.add(cat.id);
+    if (cat.children) cat.children.forEach(ch => ids.add(ch.id));
+  }
+  GENDER_CATALOG_IDS[genderId] = ids;
+}
 
 // Country code to flag emoji mapping
 const COUNTRY_FLAGS = {
@@ -131,10 +144,31 @@ export class VintedSearch {
 
       // Brand filter (if labels available, check by name since IDs may mismatch)
       if (labels.brands?.length > 0 && item.brand) {
-        const itemBrand = item.brand.toLowerCase();
-        const matchesBrand = labels.brands.some(b => itemBrand.includes(b.toLowerCase()) || b.toLowerCase().includes(itemBrand));
+        const itemBrand = item.brand.toLowerCase().trim();
+        const matchesBrand = labels.brands.some(b => {
+          const fb = b.toLowerCase().trim();
+          // Exact match or the item brand equals one of our filter brands
+          return itemBrand === fb || itemBrand.startsWith(fb + ' ') || fb.startsWith(itemBrand + ' ');
+        });
         if (!matchesBrand) {
           log.debug(`Filtered out "${item.title}" — brand "${item.brand}" not in [${labels.brands}]`);
+          return false;
+        }
+      }
+
+      // Gender/catalog filter: if query targets a specific gender, reject items from other genders
+      if (query.genderId && item.catalogId) {
+        const allowedIds = GENDER_CATALOG_IDS[query.genderId];
+        if (allowedIds && !allowedIds.has(item.catalogId)) {
+          log.debug(`Filtered out "${item.title}" — catalog ${item.catalogId} not in gender ${query.genderId}`);
+          return false;
+        }
+      }
+
+      // Catalog filter: if specific categories selected, reject items from other categories
+      if (query.catalogIds?.length > 0 && item.catalogId) {
+        if (!query.catalogIds.includes(item.catalogId) && !query.catalogIds.includes(String(item.catalogId))) {
+          log.debug(`Filtered out "${item.title}" — catalog ${item.catalogId} not in [${query.catalogIds}]`);
           return false;
         }
       }
@@ -210,7 +244,7 @@ export class VintedSearch {
       scrapedAt: now,
       // ── Secondary (used by deals, autobuy) ──
       currency: raw.price?.currency_code || raw.currency || 'EUR',
-      totalPrice: parseFloat(raw.total_item_price?.amount || raw.service_fee?.amount || 0) + parseFloat(raw.price?.amount || 0),
+      totalPrice: parseFloat(raw.total_item_price?.amount || raw.price?.amount || 0),
       condition: raw.status || '',
       seller: {
         id: raw.user?.id,
@@ -218,10 +252,13 @@ export class VintedSearch {
         rating: raw.user?.feedback_reputation || 0,
         reviewCount: raw.user?.feedback_count || 0,
       },
+      // ── Category (for post-filtering) ──
+      catalogId: raw.catalog_id || null,
       // ── Flags ──
       isFavourite: raw.is_favourite || false,
       isReserved: raw.is_reserved || false,
       isClosed: raw.is_closed || false,
+      isHidden: raw.is_hidden || false,
       createdAt: raw.created_at_ts ? new Date(raw.created_at_ts * 1000).toISOString() : '',
       // ── Lazy: only populated on detail fetch ──
       description: raw.description || '',

@@ -3,6 +3,7 @@ logs/
 sessions/
 exports/
 .env
+config.json
 config.local.json
 *.log
 .claude/

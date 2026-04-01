@@ -91,11 +91,13 @@
     .catbtn .ic{margin-right:3px}
 
     /* ── Color swatches ── */
-    .swatches{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
-    .sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s;position:relative}
-    .sw:hover{transform:scale(1.15)}
-    .sw.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
-    .sw.multi{background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red)!important}
+    .swatches{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+    .sw{display:flex;align-items:center;gap:4px;padding:3px 8px 3px 4px;border-radius:16px;cursor:pointer;border:1px solid var(--border);transition:.15s;font-size:10px;color:var(--text2)}
+    .sw:hover{border-color:var(--accent);color:var(--accent)}
+    .sw.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:600}
+    .sw-dot{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+    .sw-dot.multi{background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red)!important}
+    .sw-dot.white{border:1px solid var(--border2)}
 
     /* ── Size chips ── */
     .szgrid{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
@@ -123,6 +125,21 @@
     .brand-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
     .brand-tag{display:flex;align-items:center;gap:4px;padding:3px 8px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:20px;font-size:11px;color:var(--accent)}
     .brand-tag .x{cursor:pointer;font-weight:700}
+    .bq{padding:3px 8px;border-radius:14px;font-size:10px;cursor:pointer;border:1px solid var(--border);background:var(--bg4);color:var(--text2);transition:.15s;white-space:nowrap}
+    .bq:hover{border-color:var(--accent);color:var(--accent)}
+    .bq.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+    .bq-edit{display:inline-flex;align-items:center;gap:3px;padding:3px 6px 3px 8px;border-radius:14px;font-size:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);white-space:nowrap}
+    .bq-edit .bq-act{cursor:pointer;opacity:.5;transition:.15s;font-size:9px}
+    .bq-edit .bq-act:hover{opacity:1}
+    .brand-sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+    .brand-edit-btn{font-size:10px;color:var(--accent);cursor:pointer}
+    .brand-edit-panel{display:none;padding:8px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:8px}
+    .brand-edit-panel.open{display:block}
+    .brand-edit-title{font-size:10px;font-weight:700;color:var(--text2);margin-bottom:6px}
+    .brand-edit-add{display:flex;gap:4px;align-items:center}
+    .brand-edit-add input{flex:1;font-size:11px}
+    .brand-edit-add button{padding:4px 10px;font-size:10px}
+    .brand-hint{font-size:9px;color:var(--text3);margin-top:2px}
 
     /* ── Query cards ── */
     .qcard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px;transition:.15s}
@@ -252,12 +269,26 @@
 
       <!-- Brands -->
       <div class="sec">
-        <div class="sec-t">🏷 Marques</div>
+        <div class="brand-sec-header">
+          <div class="sec-t" style="margin:0">🏷 Marques</div>
+          <span id="brandEditBtn" class="brand-edit-btn" onclick="toggleBrandEdit()">⚙️ Gérer</span>
+        </div>
         <div class="brand-tags" id="brandTags"></div>
+        <div class="brand-quick" id="brandQuick" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
+        <div id="brandEditPanel" class="brand-edit-panel">
+          <div class="brand-edit-title">Favoris — clic sur ✕ pour supprimer, ✏️ pour renommer</div>
+          <div id="brandEditList" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
+          <div class="brand-edit-add">
+            <input id="brandFavInput" placeholder="Ajouter un favori..." oninput="filterBrandsFav()" onfocus="filterBrandsFav()">
+            <button class="btn" onclick="addFavFromInput()">+ Ajouter</button>
+          </div>
+          <div class="brand-results" id="brandFavResults" style="position:relative"></div>
+        </div>
         <div class="brand-search">
-          <input id="brandInput" placeholder="Rechercher une marque..." oninput="filterBrands()" onfocus="filterBrands()">
+          <input id="brandInput" placeholder="Rechercher ou ajouter une marque..." oninput="filterBrands()" onfocus="filterBrands()">
           <div class="brand-results" id="brandResults"></div>
         </div>
+        <div class="brand-hint">Tape une marque + Entrée pour l'ajouter (même si pas dans la liste)</div>
       </div>
 
       <!-- Sizes -->
@@ -656,6 +687,7 @@ async function initCatalog(){
   renderColorSwatches();
   renderConditions();
   renderSizes('clothing');
+  renderBrandQuick();
 }
 
 function renderGenderPills(){
@@ -698,10 +730,12 @@ function toggleCat(id){
 
 function renderColorSwatches(){
   document.getElementById('colorSwatches').innerHTML=(cat.colors||[]).map(c=>{
-    const bg=c.hex.startsWith('linear')?c.hex:c.hex;
-    const style=c.hex.startsWith('linear')?`background:${c.hex}`:`background:${c.hex}`;
-    const border=c.label==='Blanc'?';border:1px solid var(--border2)':'';
-    return `<div class="sw ${sel.colors.includes(c.id)?'on':''} ${c.id===2?'multi':''}" style="${style}${border}" title="${c.label}" onclick="toggleArr('colors',${c.id});renderColorSwatches()"></div>`;
+    const on = sel.colors.includes(c.id) ? ' on' : '';
+    const multi = c.id === 2 ? ' multi' : '';
+    const white = c.label === 'Blanc' ? ' white' : '';
+    const bg = `background:${c.hex}`;
+    return `<div class="sw${on}" onclick="toggleArr('colors',${c.id});renderColorSwatches()">` +
+           `<div class="sw-dot${multi}${white}" style="${bg}"></div>${c.label}</div>`;
   }).join('');
 }
 
@@ -724,31 +758,290 @@ function renderSortOptions(){
   ).join('');
 }
 
-// Brand search
-function filterBrands(){
-  const q=document.getElementById('brandInput').value.toLowerCase();
-  const res=document.getElementById('brandResults');
-  if(!q){res.classList.remove('show');return}
-  const matches=(cat.brands||[]).filter(b=>b.label.toLowerCase().includes(q)&&!sel.brands.find(x=>x.id===b.id)).slice(0,12);
-  res.innerHTML=matches.map(b=>`<div class="brand-opt" onmousedown="addBrand(${b.id},'${esc(b.label)}')">${b.label}</div>`).join('');
-  res.classList.toggle('show',matches.length>0);
+// ══════════════════════════════════════════════════════════════════════
+//  BRAND SYSTEM
+//  - Quick-pick favorites (toggleable buttons, persisted in localStorage)
+//  - Live search via Vinted API (correct brand IDs) with local fallback
+//  - Manual entry (type + Enter for brands not in catalog)
+//  - Edit mode (add/remove/rename favorites)
+// ══════════════════════════════════════════════════════════════════════
+
+const DEFAULT_BRANDS = [
+  { id: 53,   label: 'Nike' },
+  { id: 14,   label: 'Adidas' },
+  { id: 255,  label: 'Jordan' },
+  { id: 2319, label: 'New Balance' },
+  { id: 362,  label: 'The North Face' },
+  { id: 10,   label: 'Ralph Lauren' },
+  { id: 73,   label: 'Lacoste' },
+  { id: 57,   label: "Levi's" },
+  { id: 88,   label: 'Puma' },
+  { id: 12,   label: 'Zara' },
+  { id: 105,  label: 'Gucci' },
+  { id: 52,   label: 'Louis Vuitton' },
+];
+
+let brandSearchResults = [];   // last API search results for main search
+let favSearchResults = [];     // last API search results for fav edit
+let favBrandsCache = [];       // quick-picks currently rendered
+let customIdSeq = -1;          // auto-decrement IDs for manual brands
+let brandEditOpen = false;
+let brandSearchTimer = null;   // debounce timer for API search
+
+// ── localStorage: favorite brands ──
+
+function loadFavBrands() {
+  try {
+    const d = JSON.parse(localStorage.getItem('favBrands') || 'null');
+    return d || DEFAULT_BRANDS.map(b => ({ ...b }));
+  } catch { return DEFAULT_BRANDS.map(b => ({ ...b })); }
 }
-function addBrand(id,label){
-  if(!sel.brands.find(b=>b.id===id))sel.brands.push({id,label});
-  document.getElementById('brandInput').value='';
+
+function saveFavBrands(list) {
+  localStorage.setItem('favBrands', JSON.stringify(list));
+}
+
+// ── Brand search via API (with debounce + local fallback) ──
+
+async function searchBrandsAPI(query) {
+  if (!query || query.length < 2) return [];
+  try {
+    const res = await fetch('/api/brands/search?q=' + encodeURIComponent(query));
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) return data;
+  } catch { /* fallback below */ }
+  // Local fallback
+  const q = query.toLowerCase();
+  return (cat.brands || []).filter(b => b.label.toLowerCase().includes(q)).slice(0, 15);
+}
+
+function showDropdown(container, brands, clickFn) {
+  const selectedIds = new Set(sel.brands.map(b => b.id));
+  const filtered = brands.filter(b => !selectedIds.has(b.id));
+  container.innerHTML = filtered.map(b =>
+    `<div class="brand-opt" onmousedown="${clickFn}(${b.id},'${esc(b.label).replace(/'/g, "\\'")}')">${esc(b.label)}</div>`
+  ).join('');
+  container.classList.toggle('show', filtered.length > 0);
+}
+
+// ── Main search: autocomplete dropdown ──
+
+function filterBrands() {
+  const q = document.getElementById('brandInput').value.trim();
+  const res = document.getElementById('brandResults');
+  if (!q || q.length < 2) {
+    brandSearchResults = [];
+    res.classList.remove('show');
+    return;
+  }
+  // Debounce: wait 250ms before hitting API
+  clearTimeout(brandSearchTimer);
+  brandSearchTimer = setTimeout(async () => {
+    brandSearchResults = await searchBrandsAPI(q);
+    showDropdown(res, brandSearchResults, 'pickBrand');
+  }, 250);
+}
+
+// Called when user clicks a brand in the dropdown
+function pickBrand(id, label) {
+  if (!sel.brands.find(b => b.id === id)) {
+    sel.brands.push({ id, label });
+  }
+  document.getElementById('brandInput').value = '';
   document.getElementById('brandResults').classList.remove('show');
-  renderBrandTags();
+  brandSearchResults = [];
+  renderBrandUI();
 }
-function removeBrand(id){
-  sel.brands=sel.brands.filter(b=>b.id!==id);
-  renderBrandTags();
+
+// Called when user presses Enter in the search field
+document.getElementById('brandInput')?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const val = document.getElementById('brandInput').value.trim();
+  if (!val) return;
+
+  if (brandSearchResults.length > 0) {
+    // Pick the first result
+    const b = brandSearchResults[0];
+    pickBrand(b.id, b.label);
+  } else {
+    // Manual add — try exact match from local catalog, else custom
+    const found = (cat.brands || []).find(b => b.label.toLowerCase() === val.toLowerCase());
+    if (found) {
+      pickBrand(found.id, found.label);
+    } else {
+      // Custom brand with negative ID (won't be sent to Vinted API)
+      if (!sel.brands.find(b => b.label.toLowerCase() === val.toLowerCase())) {
+        sel.brands.push({ id: customIdSeq--, label: val, custom: true });
+      }
+      document.getElementById('brandInput').value = '';
+      document.getElementById('brandResults').classList.remove('show');
+      renderBrandUI();
+    }
+  }
+});
+
+// ── Quick-pick toggle (click a fav button to select/deselect) ──
+
+function onQuickPickClick(index) {
+  const b = favBrandsCache[index];
+  if (!b) return;
+  const idx = sel.brands.findIndex(s => s.id === b.id || s.label.toLowerCase() === b.label.toLowerCase());
+  if (idx >= 0) {
+    sel.brands.splice(idx, 1);
+  } else {
+    sel.brands.push({ id: b.id, label: b.label });
+  }
+  renderBrandUI();
 }
-function renderBrandTags(){
-  document.getElementById('brandTags').innerHTML=sel.brands.map(b=>
-    `<div class="brand-tag">${b.label} <span class="x" onclick="removeBrand(${b.id})">✕</span></div>`
+
+// ── Remove a brand from the current selection ──
+
+function removeBrand(id) {
+  sel.brands = sel.brands.filter(b => b.id !== id);
+  renderBrandUI();
+}
+
+// ── Render the UI: selected tags + quick-pick grid ──
+
+function renderBrandUI() {
+  renderBrandTags();
+  renderBrandQuick();
+}
+
+function renderBrandTags() {
+  const el = document.getElementById('brandTags');
+  if (!sel.brands.length) { el.innerHTML = ''; return; }
+  el.innerHTML = sel.brands.map(b => {
+    const icon = b.custom ? '✏️ ' : '';
+    return `<div class="brand-tag">${icon}${esc(b.label)} ` +
+           `<span class="x" onclick="removeBrand(${b.id})">✕</span></div>`;
+  }).join('');
+}
+
+function renderBrandQuick() {
+  favBrandsCache = loadFavBrands();
+  document.getElementById('brandQuick').innerHTML = favBrandsCache.map((b, i) => {
+    const on = sel.brands.find(s => s.id === b.id || s.label.toLowerCase() === b.label.toLowerCase());
+    return `<div class="bq${on ? ' on' : ''}" onclick="onQuickPickClick(${i})">${esc(b.label)}</div>`;
+  }).join('');
+}
+
+// ── Edit mode: manage favorites ──
+
+function toggleBrandEdit() {
+  brandEditOpen = !brandEditOpen;
+  document.getElementById('brandEditPanel').classList.toggle('open', brandEditOpen);
+  document.getElementById('brandEditBtn').textContent = brandEditOpen ? '✅ Terminé' : '⚙️ Gérer';
+  if (brandEditOpen) renderBrandEditList();
+}
+
+function renderBrandEditList() {
+  const favs = loadFavBrands();
+  if (!favs.length) {
+    document.getElementById('brandEditList').innerHTML = '<span style="font-size:10px;color:var(--text3)">Aucun favori</span>';
+    return;
+  }
+  document.getElementById('brandEditList').innerHTML = favs.map((b, i) =>
+    `<div class="bq-edit">` +
+      `<span>${esc(b.label)}</span>` +
+      `<span class="bq-act" onclick="renameFav(${i})" title="Renommer">✏️</span>` +
+      `<span class="bq-act" onclick="deleteFav(${i})" title="Supprimer">✕</span>` +
+    `</div>`
   ).join('');
 }
-document.addEventListener('click',e=>{if(!e.target.closest('.brand-search'))document.getElementById('brandResults').classList.remove('show')});
+
+function deleteFav(index) {
+  const favs = loadFavBrands();
+  if (index >= 0 && index < favs.length) {
+    favs.splice(index, 1);
+    saveFavBrands(favs);
+  }
+  renderBrandEditList();
+  renderBrandQuick();
+}
+
+function renameFav(index) {
+  const favs = loadFavBrands();
+  if (index < 0 || index >= favs.length) return;
+  const newName = prompt('Nouveau nom :', favs[index].label);
+  if (newName && newName.trim()) {
+    favs[index].label = newName.trim();
+    saveFavBrands(favs);
+  }
+  renderBrandEditList();
+  renderBrandQuick();
+}
+
+// ── Edit mode: add new favorites (API search) ──
+
+function filterBrandsFav() {
+  const q = document.getElementById('brandFavInput').value.trim();
+  const res = document.getElementById('brandFavResults');
+  if (!q || q.length < 2) { favSearchResults = []; res.classList.remove('show'); return; }
+  clearTimeout(brandSearchTimer);
+  brandSearchTimer = setTimeout(async () => {
+    favSearchResults = await searchBrandsAPI(q);
+    const favIds = new Set(loadFavBrands().map(f => f.id));
+    const filtered = favSearchResults.filter(b => !favIds.has(b.id));
+    res.innerHTML = filtered.map(b =>
+      `<div class="brand-opt" onmousedown="addFavBrand(${b.id},'${esc(b.label).replace(/'/g, "\\'")}')">${esc(b.label)}</div>`
+    ).join('');
+    res.classList.toggle('show', filtered.length > 0);
+  }, 250);
+}
+
+function addFavBrand(id, label) {
+  const favs = loadFavBrands();
+  if (!favs.find(f => f.id === id)) {
+    favs.push({ id, label });
+    saveFavBrands(favs);
+  }
+  document.getElementById('brandFavInput').value = '';
+  document.getElementById('brandFavResults').classList.remove('show');
+  favSearchResults = [];
+  renderBrandEditList();
+  renderBrandQuick();
+}
+
+function addFavFromInput() {
+  const inp = document.getElementById('brandFavInput');
+  const val = inp.value.trim();
+  if (!val) return;
+
+  // Try to find in last search results
+  const found = favSearchResults.find(b => b.label.toLowerCase() === val.toLowerCase());
+  if (found) { addFavBrand(found.id, found.label); return; }
+
+  // Manual fav (custom)
+  const favs = loadFavBrands();
+  if (!favs.find(f => f.label.toLowerCase() === val.toLowerCase())) {
+    favs.push({ id: customIdSeq--, label: val });
+    saveFavBrands(favs);
+  }
+  inp.value = '';
+  document.getElementById('brandFavResults').classList.remove('show');
+  renderBrandEditList();
+  renderBrandQuick();
+}
+
+document.getElementById('brandFavInput')?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (favSearchResults.length > 0) addFavBrand(favSearchResults[0].id, favSearchResults[0].label);
+  else addFavFromInput();
+});
+
+// ── Close dropdowns on outside click ──
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.brand-search')) {
+    document.getElementById('brandResults').classList.remove('show');
+  }
+  if (!e.target.closest('#brandEditPanel')) {
+    document.getElementById('brandFavResults')?.classList.remove('show');
+  }
+});
 
 function toggleArr(key,id){const a=sel[key];const i=a.indexOf(id);i>=0?a.splice(i,1):a.push(id)}
 
@@ -760,10 +1053,23 @@ async function addSearchQuery(){
   const order=document.getElementById('sq-sort').value;
   if(!text&&!sel.gender&&sel.brands.length===0&&sel.cats.length===0){alert('Ajoute au moins un mot-cle, un genre ou une marque');return}
 
+  // Build catalogIds: remove parent IDs when their children are also selected
+  // (sending both parent+child broadens the search to the whole parent category)
+  let finalCats=[...sel.cats];
+  if(sel.gender&&cat.categories[sel.gender]){
+    cat.categories[sel.gender].forEach(parent=>{
+      if(parent.children&&finalCats.includes(parent.id)){
+        const hasChild=parent.children.some(ch=>finalCats.includes(ch.id));
+        if(hasChild)finalCats=finalCats.filter(id=>id!==parent.id);
+      }
+    });
+  }
+
   const query={
     text: text||undefined,
-    catalogIds: sel.cats.length?[...sel.cats]:sel.gender?[sel.gender]:undefined,
-    brandIds: sel.brands.length?sel.brands.map(b=>b.id):undefined,
+    genderId: sel.gender||undefined,
+    catalogIds: finalCats.length?finalCats:sel.gender?[sel.gender]:undefined,
+    brandIds: sel.brands.filter(b=>b.id>0).length?sel.brands.filter(b=>b.id>0).map(b=>b.id):undefined,
     sizeIds: sel.sizes.length?[...sel.sizes]:undefined,
     colorIds: sel.colors.length?[...sel.colors]:undefined,
     statusIds: sel.conds.length?[...sel.conds]:undefined,
@@ -812,6 +1118,7 @@ async function addSearchQuery(){
     });
   }
 
+  const hadAutobuy=abCheck?.checked;
   await api('POST','/queries',query);
   // Reset builder
   sel={gender:null,cats:[],brands:[],sizes:[],colors:[],conds:[]};
@@ -821,13 +1128,13 @@ async function addSearchQuery(){
   if(abCheck)abCheck.checked=false;
   document.getElementById('sq-autobuy-opts').style.display='none';
   document.querySelectorAll('.pill').forEach(p=>p.classList.remove('on'));
-  renderCategoryGrid();renderBrandTags();renderColorSwatches();renderConditions();renderSizes('clothing');
+  renderCategoryGrid();renderBrandTags();renderBrandQuick();renderColorSwatches();renderConditions();renderSizes('clothing');
   loadQueries();
   // Stay on search page so user can add more filters
   // Flash confirmation
   const btn=document.querySelector('[onclick="addSearchQuery()"]');
   const orig=btn.textContent;
-  btn.textContent=abCheck?.checked?'✅ Filtre + Autobuy ajoutes !':'✅ Filtre ajoute !';
+  btn.textContent=hadAutobuy?'✅ Filtre + Autobuy ajoutes !':'✅ Filtre ajoute !';
   btn.style.background='var(--success)';
   setTimeout(()=>{btn.textContent=orig;btn.style.background=''},1500);
 }
@@ -1390,6 +1697,17 @@ loadWatchlist();
 fetch('/api/items').then(r=>r.json()).then(d=>{if(d?.length){items=d;renderFeed()}}).catch(()=>{});
 // Check bot status on load
 fetch('/api/bot/status').then(r=>r.json()).then(s=>{botRunning=s.running;updateBotBtns()}).catch(()=>{});
+// Sync autobuy state from backend
+fetch('/api/autobuy/status').then(r=>r.json()).then(s=>{
+  const abEn=document.getElementById('autobuy-enabled');
+  const abDr=document.getElementById('autobuy-dryrun');
+  if(abEn)abEn.checked=s.enabled;
+  if(abDr)abDr.checked=s.dryRun;
+  const md=document.getElementById('ab-max-daily');if(md)md.value=s.maxDailyPurchases;
+  const ms=document.getElementById('ab-max-spend');if(ms)ms.value=s.maxDailySpend;
+  const cd=document.getElementById('ab-cooldown');if(cd)cd.value=s.cooldownSec;
+  const mo=document.getElementById('ab-mode');if(mo)mo.value=s.mode;
+}).catch(()=>{});
 </script>
 </body>
 </html>

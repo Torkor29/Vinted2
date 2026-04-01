@@ -140,7 +140,7 @@ export const BRANDS = [
   // ── Fast Fashion ──
   { id: 12,    label: 'Zara' },
   { id: 7,     label: 'H&M' },
-  { id: 304,   label: 'Mango' },
+  { id: 169,   label: 'Mango' },
   { id: 18,    label: 'Bershka' },
   { id: 30,    label: 'Stradivarius' },
   { id: 16,    label: 'Pull & Bear' },
@@ -153,10 +153,10 @@ export const BRANDS = [
   // ── Premium / Streetwear ──
   { id: 362,   label: 'The North Face' },
   { id: 10,    label: 'Ralph Lauren' },
-  { id: 304,   label: 'Tommy Hilfiger' },
+  { id: 234,   label: 'Tommy Hilfiger' },
   { id: 73,    label: 'Lacoste' },
   { id: 57,    label: "Levi's" },
-  { id: 2319,  label: 'Carhartt' },
+  { id: 2036,  label: 'Carhartt' },
   { id: 2681,  label: 'Stüssy' },
   { id: 340,   label: 'Champion' },
   { id: 22,    label: 'Calvin Klein' },
@@ -184,13 +184,10 @@ export const BRANDS = [
   { id: 131,   label: 'Moncler' },
   { id: 116,   label: 'Alexander McQueen' },
   { id: 260,   label: 'Off-White' },
-  { id: 12345, label: 'Stone Island' },
-  { id: 304,   label: 'Palm Angels' },
+  { id: 5765,  label: 'Stone Island' },
+  { id: 21934, label: 'Palm Angels' },
 
   // ── Outdoor ──
-  { id: 362,   label: 'The North Face' },
-  { id: 1265,  label: 'Patagonia' },
-  { id: 2163,  label: 'Columbia' },
   { id: 311,   label: 'Jack Wolfskin' },
 
   // ── Divers populaires ──
@@ -205,7 +202,7 @@ export const BRANDS = [
   { id: 550,   label: 'Dr. Martens' },
   { id: 1173,  label: 'Birkenstock' },
   { id: 306,   label: 'Salomon' },
-].filter((v, i, a) => a.findIndex(b => b.id === v.id) === i); // dedupe
+];
 
 // ══════════════════════════════════════════
 //  SIZES
@@ -273,11 +270,11 @@ export const COLORS = [
 //  CONDITIONS (status_ids)
 // ══════════════════════════════════════════
 export const CONDITIONS = [
-  { id: 6, label: 'Neuf avec étiquette', short: 'Neuf+tag', icon: '🏷️' },
-  { id: 1, label: 'Neuf sans étiquette', short: 'Neuf', icon: '✨' },
-  { id: 2, label: 'Très bon état',       short: 'Très bon', icon: '👍' },
-  { id: 3, label: 'Bon état',            short: 'Bon', icon: '👌' },
-  { id: 4, label: 'Satisfaisant',        short: 'Satisf.', icon: '🔧' },
+  { id: 6, label: 'Neuf avec étiquette', short: 'Neuf+tag', icon: '🏷️', value: 'neuf_avec_etiquette' },
+  { id: 1, label: 'Neuf sans étiquette', short: 'Neuf', icon: '✨', value: 'neuf_sans_etiquette' },
+  { id: 2, label: 'Très bon état',       short: 'Très bon', icon: '👍', value: 'tres_bon_etat' },
+  { id: 3, label: 'Bon état',            short: 'Bon', icon: '👌', value: 'bon_etat' },
+  { id: 4, label: 'Satisfaisant',        short: 'Satisf.', icon: '🔧', value: 'satisfaisant' },
 ];
 
 // ══════════════════════════════════════════

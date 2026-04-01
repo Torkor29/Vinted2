@@ -98,8 +98,18 @@ export class TelegramBot {
     this.botToken = this.telegramConfig.botToken;
     this.chatId = this.telegramConfig.chatId;
 
-    /** Topic IDs persisted in config.json */
+    /** Topic IDs persisted in config.json (legacy single-group) */
     this.topicIds = this.telegramConfig.topicIds || {};
+
+    /**
+     * Per-group topic IDs: { chatId: { feed: id, deals: id, ... } }
+     * Supports multi-tenant: each group gets its own forum topics.
+     */
+    this.groupTopics = this.telegramConfig.groupTopics || {};
+    // Migrate legacy single-group topicIds into groupTopics
+    if (this.chatId && Object.keys(this.topicIds).length > 0 && !this.groupTopics[this.chatId]) {
+      this.groupTopics[this.chatId] = { ...this.topicIds };
+    }
 
     /** Polling state */
     this.polling = false;
@@ -195,59 +205,70 @@ export class TelegramBot {
   // ══════════════════════════════════════════
 
   /**
-   * Ensures all required forum topics exist in the supergroup.
-   * Creates missing ones and persists IDs to config.json.
+   * Ensures all required forum topics exist in a supergroup.
+   * @param {string} [targetChatId] - Chat ID to set up. Defaults to this.chatId (admin group).
    */
-  async ensureForumTopics() {
+  async ensureForumTopics(targetChatId = null) {
+    const chatId = targetChatId || this.chatId;
+    if (!chatId) return;
+
     try {
-      const chat = await this.apiCall('getChat', { chat_id: this.chatId });
+      const chat = await this.apiCall('getChat', { chat_id: chatId });
       if (!chat.is_forum) {
-        log.warn('Le groupe n\'a pas les topics activ\u00e9s. Messages envoy\u00e9s dans le chat principal.');
+        log.warn(`Groupe ${chatId} n'a pas les topics activés. Messages envoyés dans le chat principal.`);
         return;
       }
-      log.info('Forum topics actifs, v\u00e9rification...');
+      log.info(`Forum topics actifs pour ${chatId}, vérification...`);
     } catch (error) {
-      log.error(`Impossible de v\u00e9rifier le chat: ${error.message}`);
+      log.error(`Impossible de vérifier le chat ${chatId}: ${error.message}`);
       return;
     }
 
+    if (!this.groupTopics[chatId]) this.groupTopics[chatId] = {};
+    const topics = this.groupTopics[chatId];
     let changed = false;
 
     for (const def of TOPIC_DEFINITIONS) {
-      if (this.topicIds[def.key]) {
-        const exists = await this.topicExists(this.topicIds[def.key]);
+      if (topics[def.key]) {
+        const exists = await this.topicExists(topics[def.key], chatId);
         if (exists) {
-          log.debug(`Topic "${def.name}" OK (ID: ${this.topicIds[def.key]})`);
+          log.debug(`Topic "${def.name}" OK dans ${chatId} (ID: ${topics[def.key]})`);
           continue;
         }
-        log.warn(`Topic "${def.name}" disparu, recr\u00e9ation...`);
+        log.warn(`Topic "${def.name}" disparu dans ${chatId}, recréation...`);
       }
 
       try {
         const topic = await this.apiCall('createForumTopic', {
-          chat_id: this.chatId,
+          chat_id: chatId,
           name: def.name,
           icon_color: def.iconColor,
         });
-        this.topicIds[def.key] = topic.message_thread_id;
+        topics[def.key] = topic.message_thread_id;
         changed = true;
-        log.info(`Topic cr\u00e9\u00e9: "${def.name}" (ID: ${topic.message_thread_id})`);
+        log.info(`Topic créé dans ${chatId}: "${def.name}" (ID: ${topic.message_thread_id})`);
         await sleep(500);
       } catch (error) {
-        log.error(`Impossible de cr\u00e9er le topic "${def.name}": ${error.message}`);
+        log.error(`Impossible de créer le topic "${def.name}" dans ${chatId}: ${error.message}`);
       }
     }
 
-    if (changed) this.persistTopicIds();
+    // Keep legacy topicIds in sync for admin group
+    if (chatId === String(this.chatId) || chatId === this.chatId) {
+      this.topicIds = { ...topics };
+    }
+
+    if (changed) this.persistGroupTopics();
   }
 
   /**
    * Checks if a topic still exists by attempting close+reopen.
    */
-  async topicExists(topicId) {
+  async topicExists(topicId, chatId = null) {
+    const cid = chatId || this.chatId;
     try {
-      await this.apiCall('closeForumTopic', { chat_id: this.chatId, message_thread_id: topicId });
-      await this.apiCall('reopenForumTopic', { chat_id: this.chatId, message_thread_id: topicId });
+      await this.apiCall('closeForumTopic', { chat_id: cid, message_thread_id: topicId });
+      await this.apiCall('reopenForumTopic', { chat_id: cid, message_thread_id: topicId });
       return true;
     } catch {
       return false;
@@ -255,9 +276,16 @@ export class TelegramBot {
   }
 
   /**
-   * Persists topic IDs into config.json.
+   * Persists topic IDs into config.json (legacy + per-group).
    */
   persistTopicIds() {
+    this.persistGroupTopics();
+  }
+
+  /**
+   * Persists per-group topic IDs into config.json.
+   */
+  persistGroupTopics() {
     try {
       const configPath = resolve('config.json');
       let fileConfig = {};
@@ -266,12 +294,22 @@ export class TelegramBot {
       }
       if (!fileConfig.notifications) fileConfig.notifications = {};
       if (!fileConfig.notifications.telegram) fileConfig.notifications.telegram = {};
+      // Legacy single-group (backward compat)
       fileConfig.notifications.telegram.topicIds = { ...this.topicIds };
+      // Multi-group
+      fileConfig.notifications.telegram.groupTopics = { ...this.groupTopics };
       writeFileSync(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
-      log.info('Topic IDs sauvegardes dans config.json');
+      log.info('Group topic IDs sauvegardés dans config.json');
     } catch (error) {
       log.error(`Erreur sauvegarde topic IDs: ${error.message}`);
     }
+  }
+
+  /**
+   * Get topic IDs for a specific group. Falls back to admin group.
+   */
+  getTopicsForGroup(chatId) {
+    return this.groupTopics[chatId] || this.groupTopics[this.chatId] || this.topicIds || {};
   }
 
   // ══════════════════════════════════════════
@@ -280,11 +318,17 @@ export class TelegramBot {
 
   /**
    * Sends a text message to a specific forum topic.
+   * @param {string} topicKey - Topic key (feed, deals, etc.)
+   * @param {string} text - Message text
+   * @param {object} [options] - Extra options
+   * @param {string} [targetChatId] - Target group chatId (defaults to admin group)
    */
-  async sendToTopic(topicKey, text, options = {}) {
-    const topicId = this.topicIds[topicKey];
+  async sendToTopic(topicKey, text, options = {}, targetChatId = null) {
+    const chatId = targetChatId || this.chatId;
+    const topics = this.getTopicsForGroup(chatId);
+    const topicId = topics[topicKey];
     const payload = {
-      chat_id: this.chatId,
+      chat_id: chatId,
       text,
       parse_mode: 'HTML',
       disable_web_page_preview: options.disablePreview ?? true,
@@ -296,11 +340,18 @@ export class TelegramBot {
 
   /**
    * Sends a photo with caption to a specific forum topic.
+   * @param {string} topicKey - Topic key
+   * @param {string} photoUrl - Photo URL
+   * @param {string} caption - Caption text
+   * @param {object} [options] - Extra options
+   * @param {string} [targetChatId] - Target group chatId
    */
-  async sendPhotoToTopic(topicKey, photoUrl, caption, options = {}) {
-    const topicId = this.topicIds[topicKey];
+  async sendPhotoToTopic(topicKey, photoUrl, caption, options = {}, targetChatId = null) {
+    const chatId = targetChatId || this.chatId;
+    const topics = this.getTopicsForGroup(chatId);
+    const topicId = topics[topicKey];
     const payload = {
-      chat_id: this.chatId,
+      chat_id: chatId,
       photo: photoUrl,
       caption,
       parse_mode: 'HTML',
@@ -367,49 +418,64 @@ export class TelegramBot {
 
   /**
    * Notifies a new item in the Feed topic.
+   * @param {object} item - Item object
+   * @param {string} [targetChatId] - Target group (null = admin group)
    */
-  async notifyNewItem(item) {
+  async notifyNewItem(item, targetChatId = null) {
     const msg = formatNewItem(item);
     const opts = { reply_markup: msg.reply_markup ? JSON.stringify(msg.reply_markup) : undefined };
     if (msg.photo) {
-      await this.sendPhotoToTopic('feed', msg.photo, msg.text, opts);
+      await this.sendPhotoToTopic('feed', msg.photo, msg.text, opts, targetChatId);
     } else {
-      await this.sendToTopic('feed', msg.text, opts);
+      await this.sendToTopic('feed', msg.text, opts, targetChatId);
     }
   }
 
   /**
    * Notifies a deal in the Deals topic.
+   * @param {object} item - Item object
+   * @param {string} [targetChatId] - Target group
    */
-  async notifyDeal(item) {
+  async notifyDeal(item, targetChatId = null) {
     const msg = formatDeal(item);
     const opts = { reply_markup: msg.reply_markup ? JSON.stringify(msg.reply_markup) : undefined };
     if (msg.photo) {
-      await this.sendPhotoToTopic('deals', msg.photo, msg.text, opts);
+      await this.sendPhotoToTopic('deals', msg.photo, msg.text, opts, targetChatId);
     } else {
-      await this.sendToTopic('deals', msg.text, opts);
+      await this.sendToTopic('deals', msg.text, opts, targetChatId);
     }
   }
 
   /**
    * Notifies an autobuy action in the Autobuy topic.
+   * @param {object} item - Item object
+   * @param {object} record - Autobuy record
+   * @param {string} [targetChatId] - Target group
    */
-  async notifyAutobuy(item, record) {
+  async notifyAutobuy(item, record, targetChatId = null) {
     const msg = formatAutobuyAction(item, record);
     const opts = { reply_markup: msg.reply_markup ? JSON.stringify(msg.reply_markup) : undefined };
     if (msg.photo) {
-      await this.sendPhotoToTopic('autobuy', msg.photo, msg.text, opts);
+      await this.sendPhotoToTopic('autobuy', msg.photo, msg.text, opts, targetChatId);
     } else {
-      await this.sendToTopic('autobuy', msg.text, opts);
+      await this.sendToTopic('autobuy', msg.text, opts, targetChatId);
     }
   }
 
   /**
    * Sends an alert to the Alertes topic.
+   * @param {string} [targetChatId] - Target group (null = all groups)
    */
-  async notifyAlert(title, details = {}) {
+  async notifyAlert(title, details = {}, targetChatId = null) {
     const msg = formatAlert(title, details);
-    await this.sendToTopic('alertes', msg.text);
+    if (targetChatId) {
+      await this.sendToTopic('alertes', msg.text, {}, targetChatId);
+    } else {
+      // Broadcast alert to ALL groups
+      for (const gid of Object.keys(this.groupTopics)) {
+        await this.sendToTopic('alertes', msg.text, {}, gid);
+      }
+    }
   }
 
   /**
@@ -476,6 +542,13 @@ export class TelegramBot {
                 }
               }
               continue;
+            }
+
+            // ── Auto-setup: if command comes from a new group, create topics ──
+            const msgChatId = update.callback_query?.message?.chat?.id || update.message?.chat?.id;
+            if (msgChatId && String(msgChatId).startsWith('-') && !this.groupTopics[String(msgChatId)]) {
+              log.info(`Nouveau groupe détecté: ${msgChatId}, setup des topics...`);
+              await this.ensureForumTopics(String(msgChatId));
             }
 
             if (update.callback_query) {
@@ -1584,8 +1657,9 @@ export class TelegramBot {
         break;
       }
       case 'filters': {
-        const queries = this.sniper?.queries ?? [];
-        const msg = formatFilters(queries, { withBack: true });
+        const allQueries = this.sniper?.queries ?? [];
+        const groupQueries = this._getQueriesForGroup(allQueries, chatId);
+        const msg = formatFilters(groupQueries, { withBack: true });
         await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
         break;
       }
@@ -1866,15 +1940,49 @@ export class TelegramBot {
     }
 
     if (action.startsWith('del:')) {
-      const idx = parseInt(action.split(':')[1], 10);
-      const queries = this.sniper?.queries;
-      if (queries && idx >= 0 && idx < queries.length) {
-        queries.splice(idx, 1);
-        this.persistQueries();
+      const groupIdx = parseInt(action.split(':')[1], 10);
+      const allQueries = this.sniper?.queries;
+      if (allQueries) {
+        // Map group-local index to global index
+        const globalIdx = this._groupIndexToGlobal(allQueries, chatId, groupIdx);
+        if (globalIdx >= 0) {
+          allQueries.splice(globalIdx, 1);
+          this.persistQueries();
+        }
       }
-      const msg = formatFilters(queries || [], { withBack: true });
+      const groupQueries = this._getQueriesForGroup(allQueries || [], chatId);
+      const msg = formatFilters(groupQueries, { withBack: true });
       await this.editMessage(chatId, messageId, msg.text, msg.reply_markup);
     }
+  }
+
+  /**
+   * Returns only queries belonging to a specific group.
+   */
+  _getQueriesForGroup(queries, chatId) {
+    const cid = String(chatId);
+    return queries.filter(q => {
+      // Queries without _chatId belong to admin group (backward compat)
+      if (!q._chatId) return cid === String(this.chatId);
+      return String(q._chatId) === cid;
+    });
+  }
+
+  /**
+   * Maps a group-local query index to the global queries array index.
+   */
+  _groupIndexToGlobal(allQueries, chatId, groupIdx) {
+    const cid = String(chatId);
+    let count = 0;
+    for (let i = 0; i < allQueries.length; i++) {
+      const q = allQueries[i];
+      const belongs = q._chatId ? String(q._chatId) === cid : cid === String(this.chatId);
+      if (belongs) {
+        if (count === groupIdx) return i;
+        count++;
+      }
+    }
+    return -1;
   }
 
   // ══════════════════════════════════════════
@@ -2525,6 +2633,9 @@ export class TelegramBot {
       conditions: data.conditionLabels.length > 0 ? data.conditionLabels : undefined,
     };
 
+    // Tag query with the group where the wizard was initiated
+    query._chatId = String(conv.chatId);
+
     // Add to sniper
     if (this.sniper?.queries) {
       this.sniper.queries.push(query);
@@ -3021,9 +3132,10 @@ export class TelegramBot {
       if (!fileConfig.notifications) fileConfig.notifications = {};
       if (!fileConfig.notifications.telegram) fileConfig.notifications.telegram = {};
       fileConfig.notifications.telegram.topicIds = { ...this.topicIds };
+      fileConfig.notifications.telegram.groupTopics = { ...this.groupTopics };
 
       writeFileSync(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
-      log.debug('Config sauvegard\u00e9e');
+      log.debug('Config sauvegardée');
 
       if (this.sniper?.dashboard?.broadcast) {
         this.sniper.dashboard.broadcast('config-updated', {
