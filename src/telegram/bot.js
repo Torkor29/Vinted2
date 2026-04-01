@@ -2014,6 +2014,7 @@ export class TelegramBot {
       sizeLabels: [],
       colorLabels: [],
       conditionLabels: [],
+      lastBrandSearch: null,
     };
 
     this.setConv(userId, {
@@ -2400,10 +2401,11 @@ export class TelegramBot {
       return;
     }
 
-    // ── Brand toggle/done/skip/search ──
+    // ── Brand toggle/done/skip/search/back ──
     if (action.startsWith('br:')) {
       const val = action.split(':')[1];
       if (val === 'done' || val === 'skip') {
+        data.lastBrandSearch = null;
         conv.step = 'sizes';
         this.setConv(userId, conv);
         await this.renderFilterStep(chatId, messageId, userId);
@@ -2415,8 +2417,16 @@ export class TelegramBot {
         this.setConv(userId, { ...conv, command: 'brand_search' });
         await this.editMessage(chatId, messageId,
           `\ud83d\udd0d <b>Recherche de marque</b>\n\nTape le nom de la marque :`,
-          { inline_keyboard: [[{ text: '\u274c Annuler', callback_data: 'fw:br:done' }]] }
+          { inline_keyboard: [[{ text: '\u274c Annuler', callback_data: 'fw:br:back_popular' }]] }
         );
+        return;
+      }
+      if (val === 'back_popular') {
+        // Go back to popular brands view
+        data.lastBrandSearch = null;
+        conv.command = 'filter_wizard';
+        this.setConv(userId, conv);
+        await this.renderFilterStep(chatId, messageId, userId);
         return;
       }
       const brandId = parseInt(val, 10);
@@ -2427,13 +2437,20 @@ export class TelegramBot {
           data.brandLabels.splice(idx, 1);
         } else {
           data.brandIds.push(brandId);
-          const brand = [...POPULAR_BRANDS, ...BRANDS].find(b => b.id === brandId);
+          // Find label from search results, popular brands, or catalog
+          const allKnown = [
+            ...(data.lastBrandSearch || []),
+            ...POPULAR_BRANDS,
+            ...BRANDS,
+          ];
+          const brand = allKnown.find(b => b.id === brandId);
           data.brandLabels.push(brand?.label || String(brandId));
         }
         this.setConv(userId, conv);
-        // If we came from a search, re-render search results so user stays in search context
-        if (data._brandSearch) {
-          await this.handleBrandSearchText(chatId, userId, data._brandSearch);
+
+        // If we're in search results view, re-render search results (not popular brands)
+        if (data.lastBrandSearch) {
+          await this._renderBrandSearchResults(chatId, messageId, data);
         } else {
           await this.renderFilterStep(chatId, messageId, userId);
         }
@@ -2602,16 +2619,34 @@ export class TelegramBot {
 
   /**
    * Handles text messages during brand search.
+   * Uses Vinted API if available, falls back to local catalog.
    */
   async handleBrandSearchText(chatId, userId, text) {
     const conv = this.getConv(userId);
     if (!conv) return;
 
-    const results = searchBrands(text);
     const { data, messageId } = conv;
 
-    // Store last search so brand toggles can re-render results
-    data._brandSearch = text;
+    // Try Vinted API first, fall back to local catalog
+    let results = [];
+    try {
+      const client = this.sniper?.search?.client;
+      const country = this.sniper?.fullConfig?.countries?.[0] || 'fr';
+      if (client) {
+        const apiResult = await client.request(country, '/catalog/brands', { params: { query: text, per_page: 15 } });
+        const brands = apiResult?.brands || apiResult;
+        if (Array.isArray(brands) && brands.length > 0) {
+          results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
+        }
+      }
+    } catch (e) {
+      this.log.warn('Brand API search failed, falling back to local catalog:', e.message);
+    }
+
+    // Fallback to local catalog
+    if (results.length === 0) {
+      results = searchBrands(text);
+    }
 
     if (results.length === 0) {
       await this.editMessage(chatId, messageId,
@@ -2619,17 +2654,29 @@ export class TelegramBot {
         { inline_keyboard: [
           [{ text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' }],
           [{ text: '\ud83d\udd0d Autre recherche', callback_data: 'fw:br:search' }],
+          [{ text: '\u21a9\ufe0f Marques populaires', callback_data: 'fw:br:back_popular' }],
         ]}
       );
-      // Restore wizard command
       conv.command = 'filter_wizard';
       this.setConv(userId, conv);
       return;
     }
 
-    // Show matching brands as toggle buttons
+    // Store results for re-rendering after toggle
+    data.lastBrandSearch = results.slice(0, 12);
+    conv.command = 'filter_wizard';
+    this.setConv(userId, conv);
+
+    await this._renderBrandSearchResults(chatId, messageId, data);
+  }
+
+  /**
+   * Renders brand search results with current selections.
+   */
+  async _renderBrandSearchResults(chatId, messageId, data) {
+    const results = data.lastBrandSearch || [];
     const buttons = [];
-    const shown = results.slice(0, 9);
+    const shown = results.slice(0, 12);
     for (let i = 0; i < shown.length; i += 3) {
       const row = shown.slice(i, i + 3).map(b => {
         const selected = data.brandIds.includes(b.id);
@@ -2637,28 +2684,21 @@ export class TelegramBot {
       });
       buttons.push(row);
     }
-    // Show already-selected brands that are NOT in search results as a summary row
-    const selectedNotInResults = data.brandIds.filter(id => !shown.some(b => b.id === id));
-    if (selectedNotInResults.length > 0) {
-      const selectedLabels = selectedNotInResults.map(id => {
-        const b = [...POPULAR_BRANDS, ...BRANDS].find(x => x.id === id);
-        return b?.label || String(id);
-      });
-      buttons.push([{ text: `✅ Déjà sélectionnés: ${selectedLabels.join(', ')}`, callback_data: 'fw:br:done' }]);
+
+    let header = `\ud83d\udd0d R\u00e9sultats de recherche :`;
+    if (data.brandIds.length > 0) {
+      header += `\n\n\u2705 <b>${data.brandLabels.join(', ')}</b>`;
     }
+
     buttons.push([
       { text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' },
       { text: '\ud83d\udd0d Autre recherche', callback_data: 'fw:br:search' },
     ]);
+    buttons.push([
+      { text: '\u21a9\ufe0f Marques populaires', callback_data: 'fw:br:back_popular' },
+    ]);
 
-    // Restore wizard command
-    conv.command = 'filter_wizard';
-    this.setConv(userId, conv);
-
-    await this.editMessage(chatId, messageId,
-      `\ud83d\udd0d R\u00e9sultats pour "<b>${escapeHtml(text)}</b>" :`,
-      { inline_keyboard: buttons }
-    );
+    await this.editMessage(chatId, messageId, header, { inline_keyboard: buttons });
   }
 
   /**
