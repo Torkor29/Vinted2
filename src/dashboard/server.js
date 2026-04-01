@@ -98,6 +98,11 @@ export class Dashboard {
     });
     this.app.post('/api/queries', (req, res) => {
       const query = req.body;
+      // Tag dashboard queries with admin chatId for notification routing
+      if (!query._chatId) {
+        const tgConfig = this.modules.sniper?.fullConfig?.notifications?.telegram;
+        if (tgConfig?.chatId) query._chatId = String(tgConfig.chatId);
+      }
       this.modules.sniper?.queries.push(query);
       this.broadcast('queries:updated', this.modules.sniper?.queries);
       res.json({ ok: true, queries: this.modules.sniper?.queries });
