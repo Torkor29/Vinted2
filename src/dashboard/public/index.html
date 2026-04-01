@@ -1421,6 +1421,17 @@ loadWatchlist();
 fetch('/api/items').then(r=>r.json()).then(d=>{if(d?.length){items=d;renderFeed()}}).catch(()=>{});
 // Check bot status on load
 fetch('/api/bot/status').then(r=>r.json()).then(s=>{botRunning=s.running;updateBotBtns()}).catch(()=>{});
+// Sync autobuy state from backend
+fetch('/api/autobuy/status').then(r=>r.json()).then(s=>{
+  const abEn=document.getElementById('autobuy-enabled');
+  const abDr=document.getElementById('autobuy-dryrun');
+  if(abEn)abEn.checked=s.enabled;
+  if(abDr)abDr.checked=s.dryRun;
+  const md=document.getElementById('ab-max-daily');if(md)md.value=s.maxDailyPurchases;
+  const ms=document.getElementById('ab-max-spend');if(ms)ms.value=s.maxDailySpend;
+  const cd=document.getElementById('ab-cooldown');if(cd)cd.value=s.cooldownSec;
+  const mo=document.getElementById('ab-mode');if(mo)mo.value=s.mode;
+}).catch(()=>{});
 </script>
 </body>
 </html>

@@ -244,7 +244,7 @@ export class VintedSearch {
       scrapedAt: now,
       // ── Secondary (used by deals, autobuy) ──
       currency: raw.price?.currency_code || raw.currency || 'EUR',
-      totalPrice: parseFloat(raw.total_item_price?.amount || raw.service_fee?.amount || 0) + parseFloat(raw.price?.amount || 0),
+      totalPrice: parseFloat(raw.total_item_price?.amount || raw.price?.amount || 0),
       condition: raw.status || '',
       seller: {
         id: raw.user?.id,
@@ -258,6 +258,7 @@ export class VintedSearch {
       isFavourite: raw.is_favourite || false,
       isReserved: raw.is_reserved || false,
       isClosed: raw.is_closed || false,
+      isHidden: raw.is_hidden || false,
       createdAt: raw.created_at_ts ? new Date(raw.created_at_ts * 1000).toISOString() : '',
       // ── Lazy: only populated on detail fetch ──
       description: raw.description || '',
