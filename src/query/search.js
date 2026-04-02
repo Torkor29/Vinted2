@@ -155,33 +155,16 @@ export class VintedSearch {
         return false;
       }
 
-      // Brand filter (if labels available, check by name since IDs may mismatch)
+      // Brand filter — normalize both sides to handle Pull&Bear vs Pull & Bear etc.
       if (labels.brands?.length > 0 && item.brand) {
-        const itemBrand = item.brand.toLowerCase().trim();
+        const normalize = s => s.toLowerCase().replace(/[&\-_.\s]+/g, '').trim();
+        const itemBrand = normalize(item.brand);
         const matchesBrand = labels.brands.some(b => {
-          const fb = b.toLowerCase().trim();
-          // Exact match or the item brand equals one of our filter brands
-          return itemBrand === fb || itemBrand.startsWith(fb + ' ') || fb.startsWith(itemBrand + ' ');
+          const fb = normalize(b);
+          return itemBrand === fb || itemBrand.includes(fb) || fb.includes(itemBrand);
         });
         if (!matchesBrand) {
           log.debug(`Filtered out "${item.title}" — brand "${item.brand}" not in [${labels.brands}]`);
-          return false;
-        }
-      }
-
-      // Gender/catalog filter: if query targets a specific gender, reject items from other genders
-      if (query.genderId && item.catalogId) {
-        const allowedIds = GENDER_CATALOG_IDS[query.genderId];
-        if (allowedIds && !allowedIds.has(item.catalogId)) {
-          log.debug(`Filtered out "${item.title}" — catalog ${item.catalogId} not in gender ${query.genderId}`);
-          return false;
-        }
-      }
-
-      // Catalog filter: if specific categories selected, reject items from other categories
-      if (query.catalogIds?.length > 0 && item.catalogId) {
-        if (!query.catalogIds.includes(item.catalogId) && !query.catalogIds.includes(String(item.catalogId))) {
-          log.debug(`Filtered out "${item.title}" — catalog ${item.catalogId} not in [${query.catalogIds}]`);
           return false;
         }
       }
