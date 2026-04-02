@@ -36,8 +36,12 @@ export class VintedSearch {
     this.client = client;
     // Track seen item IDs for deduplication
     this.seenItems = new Map(); // id → timestamp
-    // Cleanup old seen items every 30 minutes
-    this.cleanupTimer = setInterval(() => this.cleanupSeen(), 30 * 60_000);
+    // Track which queries have been warmed up (first poll seeds the cache silently)
+    this.warmedUpQueries = new Set();
+    // Cleanup old seen items every 2 hours
+    this.cleanupTimer = setInterval(() => this.cleanupSeen(), 2 * 60 * 60_000);
+    // Max item age in minutes — items older than this are ignored
+    this.maxItemAgeMinutes = 30;
   }
 
   /**
@@ -105,7 +109,31 @@ export class VintedSearch {
 
     if (result.error) return [];
 
-    const newItems = result.items.filter(item => {
+    // Warmup: first poll for a query seeds the cache silently (no notifications)
+    const queryKey = query.text || query.catalogIds?.join(',') || query.brandIds?.join(',') || '_default';
+    const isWarmup = !this.warmedUpQueries.has(queryKey);
+    if (isWarmup) {
+      this.warmedUpQueries.add(queryKey);
+      for (const item of result.items) {
+        this.seenItems.set(item.id, Date.now());
+      }
+      log.info(`Warmup: seeded ${result.items.length} items for "${query.text || 'all'}" — next poll will only return truly new items`);
+      return [];
+    }
+
+    // Filter out items older than maxItemAgeMinutes
+    const ageCutoff = Date.now() - this.maxItemAgeMinutes * 60_000;
+    const recentItems = result.items.filter(item => {
+      if (!item.createdAt) return true; // no timestamp → keep (can't verify)
+      const created = new Date(item.createdAt).getTime();
+      if (created < ageCutoff) {
+        log.debug(`Skipped old item "${item.title}" — created ${Math.round((Date.now() - created) / 60_000)}min ago`);
+        return false;
+      }
+      return true;
+    });
+
+    const newItems = recentItems.filter(item => {
       if (this.seenItems.has(item.id)) return false;
       this.seenItems.set(item.id, Date.now());
       return true;
@@ -307,10 +335,10 @@ export class VintedSearch {
   }
 
   /**
-   * Clean up old seen items (>1 hour old).
+   * Clean up old seen items (>12 hours old).
    */
   cleanupSeen() {
-    const cutoff = Date.now() - 60 * 60_000;
+    const cutoff = Date.now() - 12 * 60 * 60_000;
     let removed = 0;
     for (const [id, ts] of this.seenItems) {
       if (ts < cutoff) {
