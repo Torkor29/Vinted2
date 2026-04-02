@@ -101,38 +101,25 @@ export class VintedSearch {
    * Returns only items not seen before (deduplication).
    */
   async pollNewItems(country, query = {}) {
-    // Only fetch the newest items — small page for speed
-    const searchQuery = { ...query, order: 'newest_first', page: 1, perPage: 20 };
+    const searchQuery = { ...query, order: 'newest_first', page: 1 };
     const result = await this.search(country, searchQuery);
 
     if (result.error) return [];
 
-    // Warmup: first poll for a query seeds the cache silently (no notifications)
+    // Warmup: first poll seeds the cache silently — no notification flood at startup
     const queryKey = query.text || query.catalogIds?.join(',') || query.brandIds?.join(',') || '_default';
-    const isWarmup = !this.warmedUpQueries.has(queryKey);
-    if (isWarmup) {
+    if (!this.warmedUpQueries.has(queryKey)) {
       this.warmedUpQueries.add(queryKey);
       for (const item of result.items) {
         this.seenItems.set(item.id, Date.now());
       }
-      log.info(`Warmup: seeded ${result.items.length} items for "${query.text || 'all'}" — next poll will only return truly new items`);
+      log.info(`Warmup: seeded ${result.items.length} existing items for "${query.text || 'all'}"`);
       return [];
     }
 
-    // Only keep items we haven't seen before
+    // Only keep items we've never seen — that's the sniper logic
     const newItems = result.items.filter(item => {
       if (this.seenItems.has(item.id)) return false;
-
-      // Reject items older than 2 minutes — we only want freshly posted listings
-      if (item.createdAt) {
-        const ageMs = Date.now() - new Date(item.createdAt).getTime();
-        if (ageMs > 2 * 60_000) {
-          // Still mark as seen so we don't re-check next poll
-          this.seenItems.set(item.id, Date.now());
-          return false;
-        }
-      }
-
       this.seenItems.set(item.id, Date.now());
       return true;
     });
