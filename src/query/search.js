@@ -40,8 +40,6 @@ export class VintedSearch {
     this.warmedUpQueries = new Set();
     // Cleanup old seen items every 2 hours
     this.cleanupTimer = setInterval(() => this.cleanupSeen(), 2 * 60 * 60_000);
-    // Max item age in minutes — items older than this are ignored
-    this.maxItemAgeMinutes = 30;
   }
 
   /**
@@ -103,8 +101,8 @@ export class VintedSearch {
    * Returns only items not seen before (deduplication).
    */
   async pollNewItems(country, query = {}) {
-    // Always sort by newest to catch new listings
-    const searchQuery = { ...query, order: 'newest_first', page: 1, perPage: 96 };
+    // Only fetch the newest items — small page for speed
+    const searchQuery = { ...query, order: 'newest_first', page: 1, perPage: 20 };
     const result = await this.search(country, searchQuery);
 
     if (result.error) return [];
@@ -121,20 +119,20 @@ export class VintedSearch {
       return [];
     }
 
-    // Filter out items older than maxItemAgeMinutes
-    const ageCutoff = Date.now() - this.maxItemAgeMinutes * 60_000;
-    const recentItems = result.items.filter(item => {
-      if (!item.createdAt) return true; // no timestamp → keep (can't verify)
-      const created = new Date(item.createdAt).getTime();
-      if (created < ageCutoff) {
-        log.debug(`Skipped old item "${item.title}" — created ${Math.round((Date.now() - created) / 60_000)}min ago`);
-        return false;
-      }
-      return true;
-    });
-
-    const newItems = recentItems.filter(item => {
+    // Only keep items we haven't seen before
+    const newItems = result.items.filter(item => {
       if (this.seenItems.has(item.id)) return false;
+
+      // Reject items older than 2 minutes — we only want freshly posted listings
+      if (item.createdAt) {
+        const ageMs = Date.now() - new Date(item.createdAt).getTime();
+        if (ageMs > 2 * 60_000) {
+          // Still mark as seen so we don't re-check next poll
+          this.seenItems.set(item.id, Date.now());
+          return false;
+        }
+      }
+
       this.seenItems.set(item.id, Date.now());
       return true;
     });
