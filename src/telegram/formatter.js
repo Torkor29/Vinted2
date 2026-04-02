@@ -232,7 +232,7 @@ export function formatMainMenu(sniper, config) {
         running
           ? { text: '\u23f9 Arr\u00eater', callback_data: 'act:stop' }
           : { text: '\u25b6\ufe0f Lancer', callback_data: 'act:start' },
-        sniper?.dashboard?.publicUrl
+        sniper?.dashboard?.publicUrl?.startsWith('https')
           ? { text: `\u2699\ufe0f Filtres (${queries})`, web_app: { url: `${sniper.dashboard.publicUrl}/filters.html` } }
           : { text: `\u2699\ufe0f Filtres (${queries})`, callback_data: 'nav:filters' },
       ],
