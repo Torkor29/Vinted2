@@ -57,13 +57,14 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 /** Forum topic definitions — created once in the supergroup. */
 const TOPIC_DEFINITIONS = [
-  { key: 'feed',      name: '\ud83d\udce1 Feed',              iconColor: 0x6FB9F0 },
-  { key: 'deals',     name: '\ud83d\udc8e Deals',             iconColor: 0xFFD67E },
-  { key: 'achats',    name: '\ud83d\uded2 Achats',            iconColor: 0x8EEE98 },
-  { key: 'listings',  name: '\ud83c\udff7\ufe0f Mise en vente', iconColor: 0xCB86DB },
-  { key: 'compta',    name: '\ud83d\udcb0 Comptabilit\u00e9', iconColor: 0xFFD67E },
-  { key: 'stats',     name: '\ud83d\udcca Stats',             iconColor: 0x8EEE98 },
-  { key: 'alertes',   name: '\u26a0\ufe0f Alertes',           iconColor: 0xFF93B2 },
+  { key: 'feed',      name: '📡 Feed',              iconColor: 0x6FB9F0 },
+  { key: 'deals',     name: '💎 Deals',             iconColor: 0xFFD67E },
+  { key: 'achats',    name: '🛒 Achats',            iconColor: 0x8EEE98 },
+  { key: 'listings',  name: '🏷️ Mise en vente', iconColor: 0xCB86DB },
+  { key: 'compta',    name: '💰 Comptabilité', iconColor: 0xFFD67E },
+  { key: 'stats',     name: '📊 Stats',             iconColor: 0x8EEE98 },
+  { key: 'alertes',   name: '⚠️ Alertes',           iconColor: 0xFF93B2 },
+  { key: 'logs',      name: '🔧 Logs',              iconColor: 0x7B8389 },
 ];
 
 /** Steps for the filter creation wizard (order matters). */
@@ -173,6 +174,7 @@ export class TelegramBot {
 
       const startup = formatStartupMessage();
       await this.sendToTopic('feed', startup.text);
+      await this.logToTopic('info', `<b>Bot démarré</b> — @${me.username}`);
 
       log.info('Bot Telegram pret et en ecoute');
       return true;
@@ -207,11 +209,31 @@ export class TelegramBot {
 
   /**
    * Ensures all required forum topics exist in a supergroup.
+   * Uses TELEGRAM_TOPIC_IDS env var (JSON) to persist topic IDs across deploys
+   * on ephemeral filesystems like Render.
+   * Format: TELEGRAM_TOPIC_IDS={"feed":123,"deals":456,"logs":789,...}
    * @param {string} [targetChatId] - Chat ID to set up. Defaults to this.chatId (admin group).
    */
   async ensureForumTopics(targetChatId = null) {
     const chatId = targetChatId || this.chatId;
     if (!chatId) return;
+
+    // ── Load topic IDs from env var (survives Render redeploys) ──
+    if (!this.groupTopics[chatId] || Object.keys(this.groupTopics[chatId]).length === 0) {
+      const envTopics = process.env.TELEGRAM_TOPIC_IDS;
+      if (envTopics) {
+        try {
+          const parsed = JSON.parse(envTopics);
+          if (parsed && typeof parsed === 'object') {
+            this.groupTopics[chatId] = { ...parsed };
+            this.topicIds = { ...parsed };
+            log.info(`Topic IDs chargés depuis TELEGRAM_TOPIC_IDS: ${Object.keys(parsed).join(', ')}`);
+          }
+        } catch (e) {
+          log.warn(`TELEGRAM_TOPIC_IDS invalide (JSON attendu): ${e.message}`);
+        }
+      }
+    }
 
     try {
       const chat = await this.apiCall('getChat', { chat_id: chatId });
@@ -231,6 +253,7 @@ export class TelegramBot {
 
     for (const def of TOPIC_DEFINITIONS) {
       if (topics[def.key]) {
+        // Topic ID is known — verify it still exists (lightweight check)
         const exists = await this.topicExists(topics[def.key], chatId);
         if (exists) {
           log.debug(`Topic "${def.name}" OK dans ${chatId} (ID: ${topics[def.key]})`);
@@ -239,6 +262,7 @@ export class TelegramBot {
         log.warn(`Topic "${def.name}" disparu dans ${chatId}, recréation...`);
       }
 
+      // Only create if we truly don't have a valid ID
       try {
         const topic = await this.apiCall('createForumTopic', {
           chat_id: chatId,
@@ -259,17 +283,38 @@ export class TelegramBot {
       this.topicIds = { ...topics };
     }
 
-    if (changed) this.persistGroupTopics();
+    if (changed) {
+      this.persistGroupTopics();
+      // Log the topic IDs so user can set them as env var
+      log.info(`\n╔══════════════════════════════════════════════════╗`);
+      log.info(`║  TOPIC IDS — Copie cette valeur dans Render :    ║`);
+      log.info(`║  TELEGRAM_TOPIC_IDS=${JSON.stringify(topics)}`);
+      log.info(`╚══════════════════════════════════════════════════╝`);
+      // Also send to logs topic if available
+      if (topics.logs) {
+        try {
+          await this.sendToTopic('logs', 
+            `🔧 <b>Topic IDs mis à jour</b>\n\n` +
+            `Ajoute cette env var dans Render pour éviter les doublons :\n\n` +
+            `<code>TELEGRAM_TOPIC_IDS=${JSON.stringify(topics)}</code>`
+          );
+        } catch { /* best effort */ }
+      }
+    }
   }
 
   /**
-   * Checks if a topic still exists by attempting close+reopen.
+   * Checks if a topic still exists by sending an empty action (typing indicator).
+   * Much faster than close+reopen (1 API call instead of 2).
    */
   async topicExists(topicId, chatId = null) {
     const cid = chatId || this.chatId;
     try {
-      await this.apiCall('closeForumTopic', { chat_id: cid, message_thread_id: topicId });
-      await this.apiCall('reopenForumTopic', { chat_id: cid, message_thread_id: topicId });
+      await this.apiCall('sendChatAction', {
+        chat_id: cid,
+        message_thread_id: topicId,
+        action: 'typing',
+      });
       return true;
     } catch {
       return false;
@@ -311,6 +356,20 @@ export class TelegramBot {
    */
   getTopicsForGroup(chatId) {
     return this.groupTopics[chatId] || this.groupTopics[this.chatId] || this.topicIds || {};
+  }
+
+  /**
+   * Send a log message to the 🔧 Logs topic (best-effort, never throws).
+   * @param {string} level - 'info' | 'warn' | 'error'
+   * @param {string} message - Log message (HTML supported)
+   */
+  async logToTopic(level, message) {
+    const icons = { info: 'ℹ️', warn: '⚠️', error: '❌' };
+    const icon = icons[level] || '📝';
+    const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    try {
+      await this.sendToTopic('logs', `${icon} <code>${time}</code> ${message}`);
+    } catch { /* best effort — never crash for logging */ }
   }
 
   // ══════════════════════════════════════════
@@ -545,11 +604,11 @@ export class TelegramBot {
               continue;
             }
 
-            // ── Auto-setup: if command comes from a new group, create topics ──
+            // ── Auto-setup: if command comes from a new group, create topics (non-blocking) ──
             const msgChatId = update.callback_query?.message?.chat?.id || update.message?.chat?.id;
             if (msgChatId && String(msgChatId).startsWith('-') && !this.groupTopics[String(msgChatId)]) {
-              log.info(`Nouveau groupe détecté: ${msgChatId}, setup des topics...`);
-              await this.ensureForumTopics(String(msgChatId));
+              log.info(`Nouveau groupe détecté: ${msgChatId}, setup des topics en arrière-plan...`);
+              this.ensureForumTopics(String(msgChatId)).catch(e => log.warn(`Auto-setup failed: ${e.message}`));
             }
 
             if (update.callback_query) {
@@ -1604,8 +1663,8 @@ export class TelegramBot {
 
     if (!data || !chatId) return;
 
-    // Always answer callback to clear the spinner
-    await this.apiCall('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
+    // Answer callback immediately (fire-and-forget — don't block the handler)
+    this.apiCall('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
 
     try {
       // ── Navigation ──
@@ -2118,7 +2177,7 @@ export class TelegramBot {
         for (let i = 0; i < POPULAR_BRANDS.length; i += 3) {
           const row = POPULAR_BRANDS.slice(i, i + 3).map(b => {
             const selected = data.brandIds.includes(b.id);
-            return { text: `${selected ? '\u2705 ' : ''}${b.label}`, callback_data: `fw:br:${b.id}` };
+            return { text: `${selected ? '✅ ' : ''}${b.label}`, callback_data: `fw:br:${b.id}` };
           });
           buttons.push(row);
         }
@@ -2133,8 +2192,9 @@ export class TelegramBot {
 
         let brandPrompt = '<b>Étape 3</b> — Marques (multi-sélection) :';
         if (data.brandIds.length > 0) {
-          brandPrompt += `\n\n✅ <b>${data.brandLabels.join(', ')}</b>`;
+          brandPrompt += `\n\n✅ <b>Sélectionnées (${data.brandIds.length}) : ${data.brandLabels.join(', ')}</b>`;
         }
+        brandPrompt += '\n\n💡 Utilise 🔍 pour chercher parmi toutes les marques Vinted.';
         const msg = formatFilterWizard(data, step, stepNum, FILTER_TOTAL, {
           buttons,
           prompt: brandPrompt,
@@ -2619,53 +2679,78 @@ export class TelegramBot {
 
   /**
    * Handles text messages during brand search.
-   * Uses Vinted API if available, falls back to local catalog.
+   * Uses Vinted API as primary source (reference for brand IDs),
+   * falls back to local catalog, and always allows manual add.
    */
   async handleBrandSearchText(chatId, userId, text) {
     const conv = this.getConv(userId);
     if (!conv) return;
 
     const { data, messageId } = conv;
+    const searchText = text.trim();
 
-    // Try Vinted API first, fall back to local catalog
+    // Try Vinted API first (primary source of truth for brand IDs)
     let results = [];
+    let apiWorked = false;
     try {
       const client = this.sniper?.search?.client;
       const country = this.sniper?.fullConfig?.countries?.[0] || 'fr';
       if (client) {
-        const apiResult = await client.request(country, '/catalog/brands', { params: { query: text, per_page: 15 } });
-        const brands = apiResult?.brands || apiResult;
+        // Try original query first
+        let apiResult = await client.request(country, '/catalog/brands', { params: { query: searchText, per_page: 20 } });
+        let brands = apiResult?.brands || apiResult;
+
+        // If no results, try normalized query (remove special chars like &)
+        if ((!Array.isArray(brands) || brands.length === 0) && /[&\-_.]/.test(searchText)) {
+          const normalized = searchText.replace(/[&\-_.]/g, ' ').replace(/\s+/g, ' ').trim();
+          apiResult = await client.request(country, '/catalog/brands', { params: { query: normalized, per_page: 20 } });
+          brands = apiResult?.brands || apiResult;
+        }
+
         if (Array.isArray(brands) && brands.length > 0) {
           results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
+          apiWorked = true;
         }
+      } else {
+        await this.logToTopic('warn', `Recherche marque "<b>${escapeHtml(searchText)}</b>" — client API Vinted non disponible, fallback local`);
       }
     } catch (e) {
-      this.log.warn('Brand API search failed, falling back to local catalog:', e.message);
+      log.warn('Brand API search failed, falling back to local catalog:', e.message);
+      await this.logToTopic('error', `API marque échouée pour "<b>${escapeHtml(searchText)}</b>": ${escapeHtml(e.message)}`);
     }
 
-    // Fallback to local catalog
+    // Fallback to local catalog (fuzzy matching)
     if (results.length === 0) {
-      results = searchBrands(text);
-    }
-
-    if (results.length === 0) {
-      await this.editMessage(chatId, messageId,
-        `\ud83d\udd0d Aucune marque trouv\u00e9e pour "<b>${escapeHtml(text)}</b>".\nR\u00e9essaie ou valide :`,
-        { inline_keyboard: [
-          [{ text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' }],
-          [{ text: '\ud83d\udd0d Autre recherche', callback_data: 'fw:br:search' }],
-          [{ text: '\u21a9\ufe0f Marques populaires', callback_data: 'fw:br:back_popular' }],
-        ]}
-      );
-      conv.command = 'filter_wizard';
-      this.setConv(userId, conv);
-      return;
+      results = searchBrands(searchText);
+      if (results.length > 0) {
+        await this.logToTopic('info', `Marque "<b>${escapeHtml(searchText)}</b>" trouvée via catalogue local: ${results.map(r => r.label).join(', ')}`);
+      }
+    } else {
+      await this.logToTopic('info', `Marque "<b>${escapeHtml(searchText)}</b>" trouvée via API Vinted (${results.length} résultats)`);
     }
 
     // Store results for re-rendering after toggle
     data.lastBrandSearch = results.slice(0, 12);
     conv.command = 'filter_wizard';
     this.setConv(userId, conv);
+
+    if (results.length === 0) {
+      // No results at all — show message but let user retry or go back
+      let noResultMsg = `🔍 Aucune marque trouvée pour "<b>${escapeHtml(searchText)}</b>".`;
+      if (data.brandIds.length > 0) {
+        noResultMsg += `\n\n✅ <b>Sélectionnées : ${data.brandLabels.join(', ')}</b>`;
+      }
+      noResultMsg += `\n\n💡 Essaie avec un autre mot-clé (ex: "pull bear" au lieu de "pull&bear").`;
+
+      await this.editMessage(chatId, messageId, noResultMsg,
+        { inline_keyboard: [
+          [{ text: '🔍 Nouvelle recherche', callback_data: 'fw:br:search' }],
+          [{ text: '✅ Valider ▶️', callback_data: 'fw:br:done' }],
+          [{ text: '↩️ Marques populaires', callback_data: 'fw:br:back_popular' }],
+        ]}
+      );
+      return;
+    }
 
     await this._renderBrandSearchResults(chatId, messageId, data);
   }
@@ -2680,22 +2765,23 @@ export class TelegramBot {
     for (let i = 0; i < shown.length; i += 3) {
       const row = shown.slice(i, i + 3).map(b => {
         const selected = data.brandIds.includes(b.id);
-        return { text: `${selected ? '\u2705 ' : ''}${b.label}`, callback_data: `fw:br:${b.id}` };
+        return { text: `${selected ? '✅ ' : ''}${b.label}`, callback_data: `fw:br:${b.id}` };
       });
       buttons.push(row);
     }
 
-    let header = `\ud83d\udd0d R\u00e9sultats de recherche :`;
+    let header = `🔍 Résultats de recherche :`;
     if (data.brandIds.length > 0) {
-      header += `\n\n\u2705 <b>${data.brandLabels.join(', ')}</b>`;
+      header += `\n\n✅ <b>Sélectionnées (${data.brandIds.length}) : ${data.brandLabels.join(', ')}</b>`;
     }
+    header += `\n\n💡 Tu peux sélectionner plusieurs marques, puis chercher d'autres.`;
 
     buttons.push([
-      { text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' },
-      { text: '\ud83d\udd0d Autre recherche', callback_data: 'fw:br:search' },
+      { text: '🔍 Autre recherche', callback_data: 'fw:br:search' },
     ]);
     buttons.push([
-      { text: '\u21a9\ufe0f Marques populaires', callback_data: 'fw:br:back_popular' },
+      { text: '✅ Valider ▶️', callback_data: 'fw:br:done' },
+      { text: '↩️ Marques populaires', callback_data: 'fw:br:back_popular' },
     ]);
 
     await this.editMessage(chatId, messageId, header, { inline_keyboard: buttons });
@@ -3169,6 +3255,8 @@ export class TelegramBot {
 
   /**
    * Processes the send queue with rate limiting.
+   * Telegram allows ~30 msg/s to groups, ~1 msg/s to same user.
+   * 50ms gap = ~20 msg/s (safe margin).
    */
   async processQueue() {
     if (this.processing) return;
@@ -3182,10 +3270,19 @@ export class TelegramBot {
         resolve(result);
       } catch (error) {
         this.stats.messagesFailed++;
-        log.error(`Queue: \u00e9chec ${method}: ${error.message}`);
-        reject(error);
+        // Handle Telegram rate limiting (429)
+        if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+          const retryAfter = parseInt(error.message.match(/retry after (\d+)/i)?.[1] || '2', 10);
+          log.warn(`Rate limited — pause ${retryAfter}s`);
+          await sleep(retryAfter * 1000);
+          // Re-queue the failed message at the front
+          this.sendQueue.unshift({ method, params, resolve, reject });
+        } else {
+          log.error(`Queue: échec ${method}: ${error.message}`);
+          reject(error);
+        }
       }
-      if (this.sendQueue.length > 0) await sleep(350);
+      if (this.sendQueue.length > 0) await sleep(50);
     }
 
     this.processing = false;

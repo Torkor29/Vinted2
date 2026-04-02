@@ -121,7 +121,7 @@ export const CATEGORIES = {
 };
 
 // ══════════════════════════════════════════
-//  BRANDS (top ~100 popular on Vinted FR)
+//  BRANDS (300+ popular on Vinted FR — used as fallback when API is unavailable)
 // ══════════════════════════════════════════
 export const BRANDS = [
   // ── Sportswear ──
@@ -136,6 +136,16 @@ export const BRANDS = [
   { id: 4985,  label: 'Vans' },
   { id: 94,    label: 'Under Armour' },
   { id: 2064,  label: 'Fila' },
+  { id: 2290,  label: 'Ellesse' },
+  { id: 11792, label: 'Hoka' },
+  { id: 2336,  label: 'Mizuno' },
+  { id: 365,   label: 'Kappa' },
+  { id: 1862,  label: 'Le Coq Sportif' },
+  { id: 2218,  label: 'Umbro' },
+  { id: 2005,  label: 'Saucony' },
+  { id: 4034,  label: 'On Running' },
+  { id: 2585,  label: 'Diadora' },
+  { id: 16654, label: 'Lululemon' },
 
   // ── Fast Fashion ──
   { id: 12,    label: 'Zara' },
@@ -149,6 +159,43 @@ export const BRANDS = [
   { id: 25,    label: 'Shein' },
   { id: 215,   label: 'Uniqlo' },
   { id: 480,   label: 'Kiabi' },
+  { id: 286,   label: 'Promod' },
+  { id: 35,    label: 'Pimkie' },
+  { id: 32,    label: 'Camaïeu' },
+  { id: 46,    label: 'Cache Cache' },
+  { id: 155,   label: 'Bonobo' },
+  { id: 20,    label: 'Jennyfer' },
+  { id: 24,    label: 'New Look' },
+  { id: 21,    label: 'Etam' },
+  { id: 1879,  label: 'Monki' },
+  { id: 304,   label: 'Undiz' },
+  { id: 556,   label: 'Okaïdi' },
+  { id: 501,   label: 'C&A' },
+  { id: 236,   label: 'Esprit' },
+  { id: 542,   label: 'Naf Naf' },
+  { id: 156,   label: 'Grain de Malice' },
+  { id: 4651,  label: 'Tezenis' },
+  { id: 2953,  label: 'Calzedonia' },
+  { id: 2954,  label: 'Intimissimi' },
+  { id: 2262,  label: 'Bizzbee' },
+  { id: 250,   label: 'Springfield' },
+  { id: 543,   label: 'Caroll' },
+  { id: 205,   label: 'Celio' },
+  { id: 282,   label: 'Jules' },
+  { id: 1263,  label: 'Brice' },
+  { id: 4376,  label: 'Gémo' },
+  { id: 1880,  label: 'Weekday' },
+  { id: 325,   label: 'Tally Weijl' },
+  { id: 2276,  label: 'Reserved' },
+  { id: 8498,  label: 'Subdued' },
+  { id: 1704,  label: 'Brandy Melville' },
+  { id: 1095,  label: 'American Vintage' },
+  { id: 2041,  label: 'COS' },
+  { id: 1878,  label: '& Other Stories' },
+  { id: 1877,  label: 'Arket' },
+  { id: 1093,  label: 'Massimo Dutti' },
+  { id: 4043,  label: 'Weekday' },
+  { id: 5409,  label: 'Bershka' },
 
   // ── Premium / Streetwear ──
   { id: 362,   label: 'The North Face' },
@@ -166,6 +213,43 @@ export const BRANDS = [
   { id: 8655,  label: 'Napapijri' },
   { id: 2163,  label: 'Columbia' },
   { id: 1265,  label: 'Patagonia' },
+  { id: 326,   label: 'Superdry' },
+  { id: 23,    label: 'G-Star Raw' },
+  { id: 2453,  label: 'Scotch & Soda' },
+  { id: 1096,  label: 'Fred Perry' },
+  { id: 2007,  label: 'Ben Sherman' },
+  { id: 2180,  label: 'Wrangler' },
+  { id: 2038,  label: 'Lee' },
+  { id: 2037,  label: 'Pepe Jeans' },
+  { id: 2133,  label: 'Replay' },
+  { id: 2284,  label: 'Jack & Jones' },
+  { id: 1697,  label: 'Selected Homme' },
+  { id: 1730,  label: 'Only' },
+  { id: 1731,  label: 'Vero Moda' },
+  { id: 2285,  label: 'Vila' },
+  { id: 2286,  label: 'Pieces' },
+  { id: 545,   label: 'Comptoir des Cotonniers' },
+  { id: 2044,  label: 'Gant' },
+  { id: 2254,  label: 'Hackett' },
+  { id: 2006,  label: 'Barbour' },
+  { id: 1098,  label: 'Woolrich' },
+  { id: 2171,  label: 'Abercrombie & Fitch' },
+  { id: 2170,  label: 'Hollister' },
+  { id: 14832, label: 'Corteiz' },
+  { id: 21934, label: 'Palm Angels' },
+  { id: 39008, label: 'Trapstar' },
+  { id: 2792,  label: 'Supreme' },
+  { id: 4041,  label: 'BAPE' },
+  { id: 6146,  label: 'Kith' },
+  { id: 8506,  label: 'Essentials' },
+  { id: 43772, label: 'Fear of God' },
+  { id: 36498, label: 'Represent' },
+  { id: 9024,  label: 'Gallery Dept' },
+  { id: 8104,  label: 'Ami Paris' },
+  { id: 2270,  label: 'CP Company' },
+  { id: 2127,  label: 'Maison Kitsuné' },
+  { id: 4986,  label: 'New Era' },
+  { id: 19988, label: 'Rhude' },
 
   // ── Luxe ──
   { id: 105,   label: 'Gucci' },
@@ -185,23 +269,170 @@ export const BRANDS = [
   { id: 116,   label: 'Alexander McQueen' },
   { id: 260,   label: 'Off-White' },
   { id: 5765,  label: 'Stone Island' },
-  { id: 21934, label: 'Palm Angels' },
+  { id: 127,   label: 'Bottega Veneta' },
+  { id: 142,   label: 'Dolce & Gabbana' },
+  { id: 121,   label: 'Loewe' },
+  { id: 134,   label: 'Celine' },
+  { id: 133,   label: 'Salvatore Ferragamo' },
+  { id: 126,   label: 'Balmain' },
+  { id: 136,   label: 'Kenzo' },
+  { id: 138,   label: 'Marc Jacobs' },
+  { id: 150,   label: 'Lanvin' },
+  { id: 120,   label: 'Vivienne Westwood' },
+  { id: 124,   label: 'Moschino' },
+  { id: 139,   label: 'Tory Burch' },
+  { id: 1099,  label: 'Isabel Marant' },
+  { id: 137,   label: 'Furla' },
+  { id: 2086,  label: 'Acne Studios' },
+  { id: 2085,  label: 'Maison Margiela' },
+  { id: 2269,  label: 'Rick Owens' },
+  { id: 144,   label: 'Coach' },
+  { id: 153,   label: 'Longchamp' },
+  { id: 2126,  label: 'Jacquemus' },
+  { id: 115,   label: 'Miu Miu' },
+  { id: 151,   label: 'Zadig & Voltaire' },
 
-  // ── Outdoor ──
+  // ── Outdoor / Sport technique ──
   { id: 311,   label: 'Jack Wolfskin' },
+  { id: 2164,  label: "Arc'teryx" },
+  { id: 2165,  label: 'Mammut' },
+  { id: 2166,  label: 'Millet' },
+  { id: 306,   label: 'Salomon' },
+  { id: 2167,  label: 'Merrell' },
+  { id: 1173,  label: 'Birkenstock' },
+  { id: 2168,  label: 'Keen' },
+  { id: 1266,  label: 'Fjällräven' },
+  { id: 4982,  label: 'Quechua' },
+  { id: 4983,  label: 'Decathlon' },
 
-  // ── Divers populaires ──
+  // ── Chaussures ──
+  { id: 550,   label: 'Dr. Martens' },
+  { id: 2034,  label: 'Clarks' },
+  { id: 2233,  label: 'Geox' },
+  { id: 1173,  label: 'Birkenstock' },
+  { id: 4984,  label: 'Crocs' },
+  { id: 1759,  label: 'UGG' },
+  { id: 321,   label: 'Caterpillar' },
+  { id: 2273,  label: 'Palladium' },
+  { id: 284,   label: 'André' },
+  { id: 283,   label: 'San Marina' },
+  { id: 4031,  label: 'Paraboot' },
+  { id: 1097,  label: 'Church' },
+  { id: 2236,  label: 'Sebago' },
+  { id: 2035,  label: 'Kickers' },
+  { id: 2274,  label: 'Le Chameau' },
+  { id: 2275,  label: 'Aigle' },
+  { id: 1760,  label: 'Havaianas' },
+
+  // ── Accessoires / Maroquinerie ──
   { id: 68,    label: 'Michael Kors' },
   { id: 75,    label: 'Guess' },
+  { id: 549,   label: 'Fossil' },
+  { id: 2293,  label: 'Daniel Wellington' },
+  { id: 2294,  label: 'Casio' },
+  { id: 547,   label: 'Swarovski' },
+  { id: 548,   label: 'Pandora' },
+  { id: 2295,  label: 'Cluse' },
+  { id: 2296,  label: 'Kapten & Son' },
+  { id: 2297,  label: 'Lancaster' },
+  { id: 544,   label: 'Lancel' },
+  { id: 2298,  label: 'Le Tanneur' },
+  { id: 2299,  label: 'Eastpak' },
+  { id: 2300,  label: 'Herschel' },
+  { id: 2301,  label: 'Fjällräven' },
+  { id: 2302,  label: 'Samsonite' },
+  { id: 4033,  label: 'Goyard' },
+  { id: 546,   label: 'Ray-Ban' },
+  { id: 2303,  label: 'Oakley' },
+  { id: 2304,  label: 'Carrera' },
+
+  // ── Française / Créateurs ──
   { id: 1780,  label: 'Sandro' },
   { id: 1781,  label: 'Maje' },
   { id: 1782,  label: 'Claudie Pierlot' },
+  { id: 1094,  label: 'Ba&sh' },
+  { id: 1095,  label: 'American Vintage' },
+  { id: 1783,  label: 'The Kooples' },
+  { id: 1784,  label: 'Iro' },
+  { id: 151,   label: 'Zadig & Voltaire' },
+  { id: 539,   label: 'Gérard Darel' },
+  { id: 540,   label: 'Vanessa Bruno' },
+  { id: 541,   label: 'Sézane' },
+  { id: 2277,  label: 'Balzac Paris' },
+  { id: 2278,  label: 'Rouje' },
+  { id: 2279,  label: 'Musier' },
+  { id: 2280,  label: 'Réalisation Par' },
+  { id: 543,   label: 'Caroll' },
+  { id: 545,   label: 'Comptoir des Cotonniers' },
+
+  // ── Enfants ──
+  { id: 2308,  label: 'Petit Bateau' },
+  { id: 2309,  label: 'Catimini' },
+  { id: 2310,  label: 'Tartine et Chocolat' },
+  { id: 2311,  label: 'Bonpoint' },
+  { id: 556,   label: 'Okaïdi' },
+  { id: 2312,  label: 'DPAM' },
+  { id: 2313,  label: 'Sergent Major' },
+  { id: 2314,  label: 'Jacadi' },
+  { id: 2315,  label: 'Vertbaudet' },
+  { id: 2316,  label: 'Absorba' },
+  { id: 2317,  label: 'Cyrillus' },
+  { id: 2318,  label: 'Orchestra' },
+
+  // ── Divers populaires ──
   { id: 559,   label: 'Desigual' },
   { id: 2281,  label: 'Diesel' },
   { id: 146,   label: 'Armani' },
-  { id: 550,   label: 'Dr. Martens' },
-  { id: 1173,  label: 'Birkenstock' },
-  { id: 306,   label: 'Salomon' },
+  { id: 2282,  label: 'Emporio Armani' },
+  { id: 2283,  label: 'EA7' },
+  { id: 8,     label: 'Nike ACG' },
+  { id: 180,   label: 'Gap' },
+  { id: 1733,  label: 'Abercrombie & Fitch' },
+  { id: 1734,  label: 'American Eagle' },
+  { id: 1735,  label: 'Banana Republic' },
+  { id: 1736,  label: 'J.Crew' },
+  { id: 287,   label: 'Oxbow' },
+  { id: 288,   label: 'Rip Curl' },
+  { id: 289,   label: 'Quicksilver' },
+  { id: 290,   label: 'Billabong' },
+  { id: 291,   label: 'DC Shoes' },
+  { id: 292,   label: 'Element' },
+  { id: 2287,  label: 'Volcom' },
+  { id: 2288,  label: 'Obey' },
+  { id: 2289,  label: 'Carhartt WIP' },
+  { id: 2291,  label: 'Sergio Tacchini' },
+  { id: 1100,  label: 'Cos' },
+  { id: 277,   label: 'Morgan' },
+  { id: 278,   label: 'Kookaï' },
+  { id: 279,   label: 'Mim' },
+  { id: 280,   label: 'La Redoute' },
+  { id: 281,   label: 'Somewhere' },
+  { id: 557,   label: 'Du Pareil au Même' },
+  { id: 558,   label: 'Tape à l\'Oeil' },
+  { id: 1738,  label: 'Ted Baker' },
+  { id: 1739,  label: 'Reiss' },
+  { id: 1740,  label: 'AllSaints' },
+  { id: 1741,  label: 'Whistles' },
+  { id: 1742,  label: 'Karen Millen' },
+  { id: 1743,  label: 'Hobbs' },
+  { id: 2292,  label: 'Lyle & Scott' },
+  { id: 2305,  label: 'Armor Lux' },
+  { id: 2306,  label: 'Saint James' },
+  { id: 2307,  label: 'Petit Bateau' },
+  { id: 561,   label: "Levi's Vintage" },
+  { id: 563,   label: 'Wrangler' },
+  { id: 564,   label: 'Lee Cooper' },
+  { id: 2320,  label: 'K-Way' },
+  { id: 2321,  label: 'Schott' },
+  { id: 2322,  label: 'Chevignon' },
+  { id: 2323,  label: 'Teddy Smith' },
+  { id: 2324,  label: 'Kaporal' },
+  { id: 2325,  label: 'Deeluxe' },
+  { id: 2326,  label: 'Redskins' },
+  { id: 2327,  label: 'Le Temps des Cerises' },
+  { id: 2328,  label: 'Ikks' },
+  { id: 2329,  label: 'Eleven Paris' },
+  { id: 570,   label: 'Petit Bateau' },
 ];
 
 // ══════════════════════════════════════════
@@ -296,10 +527,28 @@ export function getCategoriesForGender(genderId) {
   return CATEGORIES[genderId] || [];
 }
 
-/** Find brand by name (case-insensitive partial match) */
+/** Normalize a string for fuzzy brand matching (strip &, -, spaces, accents). */
+function normalizeBrand(str) {
+  return str
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+    .replace(/[&\-_.']/g, '')                          // strip special chars
+    .replace(/\s+/g, '');                               // strip spaces
+}
+
+/** Find brand by name (case-insensitive partial match with fuzzy normalization).
+ *  Matches both raw text and normalized text so "pull&bear", "pullbear",
+ *  "pull bear", "Pull & Bear" all find the same entry. */
 export function searchBrands(query) {
   const q = query.toLowerCase();
-  return BRANDS.filter(b => b.label.toLowerCase().includes(q));
+  const qNorm = normalizeBrand(query);
+
+  return BRANDS.filter(b => {
+    const label = b.label.toLowerCase();
+    const labelNorm = normalizeBrand(b.label);
+    // Match on raw text OR normalized text
+    return label.includes(q) || labelNorm.includes(qNorm) || qNorm.includes(labelNorm);
+  });
 }
 
 /** Get size group based on category */
