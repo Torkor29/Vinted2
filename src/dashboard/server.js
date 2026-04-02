@@ -3,8 +3,10 @@ import { createServer } from 'http';
 import { Server as SocketIO } from 'socket.io';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { createLogger } from '../utils/logger.js';
 import { getAllCatalogData } from '../data/vinted-catalog.js';
+import { liveCatalog } from '../data/live-catalog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const log = createLogger('dashboard');
@@ -82,9 +84,19 @@ export class Dashboard {
       });
     });
 
-    // Catalog data (genres, categories, brands, sizes, colors, conditions)
+    // Catalog data — live from Vinted API with fallback
     this.app.get('/api/catalog', (req, res) => {
-      res.json(getAllCatalogData());
+      if (liveCatalog.ready) {
+        res.json({
+          genders: liveCatalog.getGenders(),
+          categories: liveCatalog.categories,
+          sizes: liveCatalog.getSizes(),
+          colors: liveCatalog.getColors(),
+          conditions: liveCatalog.getConditions(),
+        });
+      } else {
+        res.json(getAllCatalogData());
+      }
     });
 
     // Brand search via Vinted API (returns correct brand IDs)
@@ -115,12 +127,12 @@ export class Dashboard {
     });
     this.app.post('/api/queries', (req, res) => {
       const query = req.body;
-      // Tag dashboard queries with admin chatId for notification routing
       if (!query._chatId) {
         const tgConfig = this.modules.sniper?.fullConfig?.notifications?.telegram;
         if (tgConfig?.chatId) query._chatId = String(tgConfig.chatId);
       }
       this.modules.sniper?.queries.push(query);
+      this._persistQueries();
       this.broadcast('queries:updated', this.modules.sniper?.queries);
       res.json({ ok: true, queries: this.modules.sniper?.queries });
     });
@@ -131,6 +143,7 @@ export class Dashboard {
         return res.json({ ok: false, error: 'invalid index' });
       }
       queries.splice(idx, 1);
+      this._persistQueries();
       this.broadcast('queries:updated', queries);
       res.json({ ok: true });
     });
@@ -487,6 +500,22 @@ export class Dashboard {
   }
 
   /**
+   * Persist queries to config.json.
+   */
+  _persistQueries() {
+    try {
+      const configPath = resolve('config.json');
+      let fileConfig = {};
+      if (existsSync(configPath)) fileConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+      fileConfig.queries = this.modules.sniper?.queries ?? [];
+      writeFileSync(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
+      log.info('Queries persisted to config.json');
+    } catch (e) {
+      log.error('Failed to persist queries:', e.message);
+    }
+  }
+
+  /**
    * Push a new item to connected dashboards.
    */
   pushNewItem(item) {
@@ -553,7 +582,10 @@ export class Dashboard {
     }
 
     const url = `http://${this.config.host}:${port}`;
+    // Expose public URL for Telegram Mini App
+    this.publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || url;
     log.info(`Dashboard running at ${url}`);
+    if (this.publicUrl !== url) log.info(`Public URL: ${this.publicUrl}`);
     if (this.config.host !== 'localhost' && this.config.host !== '127.0.0.1') {
       log.warn('WARNING: Dashboard is exposed to the network. It has no authentication. Set host to "localhost" in config for security.');
     }

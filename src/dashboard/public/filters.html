@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Filtres Vinted</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:#1a1a2e;--bg2:#16213e;--card:#0f3460;--accent:#e94560;--green:#00d26a;
+  --text:#eee;--muted:#999;--border:#2a2a4a;--input-bg:#0d1b3e;
+  --tg-theme-bg-color:var(--bg);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:80px}
+
+/* Header */
+.header{background:var(--bg2);padding:14px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header h1{font-size:18px;font-weight:600}
+.header .count{background:var(--accent);color:#fff;border-radius:12px;padding:2px 10px;font-size:13px}
+
+/* Tabs */
+.tabs{display:flex;gap:0;background:var(--bg2);border-bottom:1px solid var(--border)}
+.tab{flex:1;padding:10px;text-align:center;font-size:14px;font-weight:500;cursor:pointer;
+  border-bottom:2px solid transparent;transition:.2s;color:var(--muted)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* Filter list */
+.filter-list{padding:12px}
+.filter-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin-bottom:10px;position:relative}
+.filter-card .fc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.filter-card .fc-title{font-weight:600;font-size:15px}
+.filter-card .fc-del{color:var(--accent);border:none;background:none;font-size:20px;cursor:pointer;padding:4px 8px}
+.filter-card .fc-tags{display:flex;flex-wrap:wrap;gap:6px}
+.filter-card .tag{background:var(--card);border-radius:8px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.filter-card .tag b{color:var(--text)}
+
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty p{margin-bottom:16px}
+
+/* Create filter form */
+.form{padding:16px;display:none}
+.form.active{display:block}
+.form-section{margin-bottom:20px}
+.form-section label{display:block;font-size:13px;font-weight:600;color:var(--muted);
+  margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+
+/* Chips (multi-select) */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;transition:.15s;
+  border:1px solid var(--border);background:var(--input-bg);color:var(--text)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
+.chip.gender{padding:10px 18px;font-size:15px}
+
+/* Brand search */
+.search-box{position:relative;margin-bottom:10px}
+.search-box input{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--input-bg);color:var(--text);font-size:14px;outline:none}
+.search-box input:focus{border-color:var(--accent)}
+.search-box input::placeholder{color:var(--muted)}
+.search-results{background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+  max-height:200px;overflow-y:auto;margin-top:4px}
+.search-results.hidden{display:none}
+.sr-item{padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center}
+.sr-item:last-child{border:none}
+.sr-item:active{background:var(--card)}
+.sr-item .check{color:var(--green);font-weight:bold}
+.selected-brands{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+
+/* Price */
+.price-row{display:flex;gap:10px;align-items:center}
+.price-row input{width:100px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);
+  background:var(--input-bg);color:var(--text);font-size:14px;outline:none;text-align:center}
+.price-row span{color:var(--muted);font-size:13px}
+
+/* Bottom bar */
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px;
+  background:var(--bg2);border-top:1px solid var(--border);display:flex;gap:10px;z-index:100}
+.btn{flex:1;padding:12px;border-radius:10px;border:none;font-size:15px;font-weight:600;
+  cursor:pointer;transition:.15s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:active{background:#c33}
+.btn-secondary{background:var(--card);color:var(--text)}
+.btn-secondary:active{background:var(--border)}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* Loader */
+.loader{display:flex;justify-content:center;padding:30px}
+.loader .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin:0 4px;
+  animation:bounce .6s infinite alternate}
+.loader .dot:nth-child(2){animation-delay:.2s}
+.loader .dot:nth-child(3){animation-delay:.4s}
+@keyframes bounce{to{transform:translateY(-10px);opacity:.3}}
+
+/* Step indicator */
+.steps{display:flex;justify-content:center;gap:6px;padding:12px;background:var(--bg2)}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:.2s}
+.step-dot.active{background:var(--accent);width:24px;border-radius:4px}
+.step-dot.done{background:var(--green)}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1 id="headerTitle">Filtres Vinted</h1>
+  <span class="count" id="filterCount">0</span>
+</div>
+
+<div class="tabs" id="mainTabs">
+  <div class="tab active" data-tab="list">Mes filtres</div>
+  <div class="tab" data-tab="create">+ Nouveau</div>
+</div>
+
+<!-- FILTER LIST -->
+<div id="listView" class="filter-list"></div>
+
+<!-- CREATE FILTER FORM -->
+<div id="createView" class="form">
+  <div class="steps" id="stepDots"></div>
+
+  <!-- Step 1: Gender -->
+  <div class="form-section step-content" data-step="0">
+    <label>Genre</label>
+    <div class="chips" id="genderChips"></div>
+  </div>
+
+  <!-- Step 2: Categories -->
+  <div class="form-section step-content" data-step="1" style="display:none">
+    <label>Categories</label>
+    <div class="chips" id="catChips"></div>
+  </div>
+
+  <!-- Step 3: Brands -->
+  <div class="form-section step-content" data-step="2" style="display:none">
+    <label>Marques</label>
+    <div class="search-box">
+      <input type="text" id="brandSearch" placeholder="Chercher une marque..." autocomplete="off">
+    </div>
+    <div class="search-results hidden" id="brandResults"></div>
+    <div class="selected-brands chips" id="selectedBrands"></div>
+  </div>
+
+  <!-- Step 4: Sizes -->
+  <div class="form-section step-content" data-step="3" style="display:none">
+    <label>Tailles</label>
+    <div class="chips" id="sizeChips"></div>
+  </div>
+
+  <!-- Step 5: Colors -->
+  <div class="form-section step-content" data-step="4" style="display:none">
+    <label>Couleurs</label>
+    <div class="chips" id="colorChips"></div>
+  </div>
+
+  <!-- Step 6: Conditions -->
+  <div class="form-section step-content" data-step="5" style="display:none">
+    <label>Etat</label>
+    <div class="chips" id="condChips"></div>
+  </div>
+
+  <!-- Step 7: Price -->
+  <div class="form-section step-content" data-step="6" style="display:none">
+    <label>Prix</label>
+    <div class="price-row">
+      <input type="number" id="priceFrom" placeholder="Min">
+      <span>-</span>
+      <input type="number" id="priceTo" placeholder="Max">
+      <span>EUR</span>
+    </div>
+  </div>
+
+  <!-- Step 8: Keywords -->
+  <div class="form-section step-content" data-step="7" style="display:none">
+    <label>Mots-cles (optionnel)</label>
+    <div class="search-box">
+      <input type="text" id="keywords" placeholder="Ex: vintage, oversized...">
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar" id="bottomBar">
+  <button class="btn btn-primary" id="btnNew" onclick="showCreate()">+ Nouveau filtre</button>
+</div>
+
+<script>
+const TG = window.Telegram?.WebApp;
+if(TG){TG.ready();TG.expand();TG.setHeaderColor('#1a1a2e');TG.setBackgroundColor('#1a1a2e')}
+
+// Base URL = same origin as this page
+const API = '';
+
+// ═══════════════════════════
+//  STATE
+// ═══════════════════════════
+let catalog = null;
+let filters = [];
+let currentStep = 0;
+const STEPS = ['gender','categories','brands','sizes','colors','conditions','price','keywords'];
+const sel = {
+  genderId:null, genderLabel:'',
+  categoryIds:[], categoryLabels:[],
+  brandIds:[], brandLabels:[],
+  sizeIds:[], sizeLabels:[],
+  colorIds:[], colorLabels:[],
+  conditionIds:[], conditionLabels:[],
+  priceFrom:null, priceTo:null,
+  text:null
+};
+let brandSearchTimer = null;
+
+// ═══════════════════════════
+//  INIT
+// ═══════════════════════════
+async function init(){
+  try{
+    const [catRes, filterRes] = await Promise.all([
+      fetch(API+'/api/catalog').then(r=>r.json()),
+      fetch(API+'/api/queries').then(r=>r.json())
+    ]);
+    catalog = catRes;
+    filters = filterRes;
+  }catch(e){
+    console.error('Init failed',e);
+    catalog = {genders:[],categories:{},sizes:{clothing:[],shoes_women:[],shoes_men:[],jeans:[]},colors:[],conditions:[]};
+    filters = [];
+  }
+  renderFilters();
+  setupTabs();
+}
+
+// ═══════════════════════════
+//  TABS
+// ═══════════════════════════
+function setupTabs(){
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.onclick=()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      if(t.dataset.tab==='list'){
+        document.getElementById('listView').style.display='';
+        document.getElementById('createView').classList.remove('active');
+        document.getElementById('bottomBar').innerHTML='<button class="btn btn-primary" onclick="showCreate()">+ Nouveau filtre</button>';
+      } else {
+        showCreate();
+      }
+    };
+  });
+}
+
+// ═══════════════════════════
+//  FILTER LIST
+// ═══════════════════════════
+function renderFilters(){
+  const el = document.getElementById('listView');
+  document.getElementById('filterCount').textContent = filters.length;
+
+  if(!filters.length){
+    el.innerHTML='<div class="empty"><p>Aucun filtre</p><p>Clique sur + Nouveau pour en creer un</p></div>';
+    return;
+  }
+
+  el.innerHTML = filters.map((f,i)=>{
+    const tags = [];
+    const L = f._labels||{};
+    if(L.gender) tags.push(`<span class="tag"><b>${esc(L.gender)}</b></span>`);
+    if(L.categories?.length) L.categories.forEach(c=>tags.push(`<span class="tag">${esc(c)}</span>`));
+    if(L.brands?.length) L.brands.forEach(b=>tags.push(`<span class="tag"><b>${esc(b)}</b></span>`));
+    if(L.sizes?.length) tags.push(`<span class="tag">${L.sizes.join(', ')}</span>`);
+    if(L.colors?.length) tags.push(`<span class="tag">${L.colors.join(', ')}</span>`);
+    if(L.conditions?.length) L.conditions.forEach(c=>tags.push(`<span class="tag">${esc(c)}</span>`));
+    if(f.priceTo) tags.push(`<span class="tag">Max <b>${f.priceTo}EUR</b></span>`);
+    if(f.priceFrom) tags.push(`<span class="tag">Min <b>${f.priceFrom}EUR</b></span>`);
+    if(f.text) tags.push(`<span class="tag">"<b>${esc(f.text)}</b>"</span>`);
+    return `<div class="filter-card">
+      <div class="fc-head">
+        <span class="fc-title">Filtre #${i+1}</span>
+        <button class="fc-del" onclick="deleteFilter(${i})">x</button>
+      </div>
+      <div class="fc-tags">${tags.join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteFilter(idx){
+  try{
+    await fetch(API+'/api/queries/'+idx,{method:'DELETE'});
+    filters.splice(idx,1);
+    renderFilters();
+    if(TG) TG.showAlert('Filtre supprime');
+  }catch(e){console.error(e)}
+}
+
+// ═══════════════════════════
+//  CREATE FILTER
+// ═══════════════════════════
+function showCreate(){
+  currentStep=0;
+  Object.assign(sel,{
+    genderId:null,genderLabel:'',categoryIds:[],categoryLabels:[],
+    brandIds:[],brandLabels:[],sizeIds:[],sizeLabels:[],
+    colorIds:[],colorLabels:[],conditionIds:[],conditionLabels:[],
+    priceFrom:null,priceTo:null,text:null
+  });
+  document.getElementById('listView').style.display='none';
+  document.getElementById('createView').classList.add('active');
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab')[1].classList.add('active');
+  renderStep();
+}
+
+function renderStep(){
+  // Step dots
+  const dots = document.getElementById('stepDots');
+  dots.innerHTML = STEPS.map((_,i)=>{
+    const cls = i<currentStep?'done':i===currentStep?'active':'';
+    return `<div class="step-dot ${cls}"></div>`;
+  }).join('');
+
+  // Show/hide step content
+  document.querySelectorAll('.step-content').forEach(el=>{
+    el.style.display = parseInt(el.dataset.step)===currentStep?'':'none';
+  });
+
+  // Render current step content
+  switch(STEPS[currentStep]){
+    case 'gender': renderGenders(); break;
+    case 'categories': renderCategories(); break;
+    case 'brands': renderBrands(); break;
+    case 'sizes': renderSizes(); break;
+    case 'colors': renderColors(); break;
+    case 'conditions': renderConditions(); break;
+    case 'price': renderPrice(); break;
+    case 'keywords': break; // just an input
+  }
+
+  // Bottom bar
+  const isFirst = currentStep===0;
+  const isLast = currentStep===STEPS.length-1;
+  document.getElementById('bottomBar').innerHTML = `
+    ${!isFirst?'<button class="btn btn-secondary" onclick="prevStep()">Retour</button>':''}
+    <button class="btn btn-secondary" onclick="skipStep()">Passer</button>
+    <button class="btn btn-primary" onclick="${isLast?'saveFilter()':'nextStep()'}">
+      ${isLast?'Enregistrer':'Suivant'}
+    </button>
+  `;
+}
+
+function nextStep(){
+  collectCurrentStep();
+  if(currentStep<STEPS.length-1){currentStep++;renderStep()}
+}
+function prevStep(){
+  if(currentStep>0){currentStep--;renderStep()}
+}
+function skipStep(){
+  if(currentStep<STEPS.length-1){currentStep++;renderStep()}
+  else saveFilter();
+}
+
+function collectCurrentStep(){
+  if(STEPS[currentStep]==='price'){
+    const pf=document.getElementById('priceFrom').value;
+    const pt=document.getElementById('priceTo').value;
+    if(pf) sel.priceFrom=parseFloat(pf);
+    if(pt) sel.priceTo=parseFloat(pt);
+  }
+  if(STEPS[currentStep]==='keywords'){
+    const kw=document.getElementById('keywords').value.trim();
+    if(kw) sel.text=kw;
+  }
+}
+
+// ── Gender ──
+function renderGenders(){
+  const el=document.getElementById('genderChips');
+  const genders=catalog.genders||[];
+  el.innerHTML=genders.map(g=>{
+    const on=sel.genderId===g.id?'on':'';
+    return `<div class="chip gender ${on}" onclick="pickGender(${g.id},'${esc(g.label)}')">${g.icon||''} ${esc(g.label)}</div>`;
+  }).join('');
+}
+function pickGender(id,label){
+  sel.genderId=sel.genderId===id?null:id;
+  sel.genderLabel=sel.genderId?label:'';
+  sel.categoryIds=[];sel.categoryLabels=[];
+  renderGenders();
+}
+
+// ── Categories ──
+function renderCategories(){
+  const el=document.getElementById('catChips');
+  const cats=(catalog.categories||{})[sel.genderId]||[];
+  // Flatten: show parents and their children
+  const flat=[];
+  for(const c of cats){
+    if(c.children?.length){
+      for(const ch of c.children) flat.push(ch);
+    } else {
+      flat.push(c);
+    }
+  }
+  el.innerHTML=flat.map(c=>{
+    const on=sel.categoryIds.includes(c.id)?'on':'';
+    return `<div class="chip ${on}" onclick="toggleCat(${c.id},'${esc(c.label)}')">${c.icon||''} ${esc(c.label)}</div>`;
+  }).join('');
+}
+function toggleCat(id,label){
+  const i=sel.categoryIds.indexOf(id);
+  if(i>=0){sel.categoryIds.splice(i,1);sel.categoryLabels.splice(i,1)}
+  else{sel.categoryIds.push(id);sel.categoryLabels.push(label)}
+  renderCategories();
+}
+
+// ── Brands ──
+function renderBrands(){
+  renderSelectedBrands();
+  const input=document.getElementById('brandSearch');
+  input.value='';
+  document.getElementById('brandResults').classList.add('hidden');
+  input.oninput=()=>{
+    clearTimeout(brandSearchTimer);
+    const q=input.value.trim();
+    if(q.length<2){document.getElementById('brandResults').classList.add('hidden');return}
+    brandSearchTimer=setTimeout(()=>searchBrands(q),250);
+  };
+}
+async function searchBrands(q){
+  const el=document.getElementById('brandResults');
+  el.innerHTML='<div class="sr-item" style="color:var(--muted)">Recherche...</div>';
+  el.classList.remove('hidden');
+  try{
+    const res=await fetch(API+'/api/brands/search?q='+encodeURIComponent(q));
+    const brands=await res.json();
+    if(!brands.length){
+      el.innerHTML='<div class="sr-item" style="color:var(--muted)">Aucun resultat</div>';
+      return;
+    }
+    el.innerHTML=brands.slice(0,12).map(b=>{
+      const selected=sel.brandIds.includes(b.id);
+      return `<div class="sr-item" onclick="toggleBrand(${b.id},'${esc(b.label)}')">
+        ${esc(b.label)} ${selected?'<span class="check">OK</span>':''}
+      </div>`;
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div class="sr-item" style="color:var(--accent)">Erreur de recherche</div>';
+  }
+}
+function toggleBrand(id,label){
+  const i=sel.brandIds.indexOf(id);
+  if(i>=0){sel.brandIds.splice(i,1);sel.brandLabels.splice(i,1)}
+  else{sel.brandIds.push(id);sel.brandLabels.push(label)}
+  renderSelectedBrands();
+  // Re-render search results to update check marks
+  const q=document.getElementById('brandSearch').value.trim();
+  if(q.length>=2) searchBrands(q);
+}
+function removeBrand(id){
+  const i=sel.brandIds.indexOf(id);
+  if(i>=0){sel.brandIds.splice(i,1);sel.brandLabels.splice(i,1)}
+  renderSelectedBrands();
+}
+function renderSelectedBrands(){
+  const el=document.getElementById('selectedBrands');
+  el.innerHTML=sel.brandIds.map((id,i)=>{
+    return `<div class="chip on" onclick="removeBrand(${id})">${esc(sel.brandLabels[i])} x</div>`;
+  }).join('');
+}
+
+// ── Sizes ──
+function renderSizes(){
+  const el=document.getElementById('sizeChips');
+  const sizes=catalog.sizes?.clothing||[];
+  el.innerHTML=sizes.map(s=>{
+    const on=sel.sizeIds.includes(s.id)?'on':'';
+    return `<div class="chip ${on}" onclick="toggleSize(${s.id},'${esc(s.label)}')">${esc(s.label)}</div>`;
+  }).join('');
+}
+function toggleSize(id,label){
+  const i=sel.sizeIds.indexOf(id);
+  if(i>=0){sel.sizeIds.splice(i,1);sel.sizeLabels.splice(i,1)}
+  else{sel.sizeIds.push(id);sel.sizeLabels.push(label)}
+  renderSizes();
+}
+
+// ── Colors ──
+function renderColors(){
+  const el=document.getElementById('colorChips');
+  const colors=catalog.colors||[];
+  el.innerHTML=colors.map(c=>{
+    const on=sel.colorIds.includes(c.id)?'on':'';
+    const dot=c.hex?`<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c.hex};margin-right:4px;vertical-align:middle;border:1px solid #444"></span>`:'';
+    return `<div class="chip ${on}" onclick="toggleColor(${c.id},'${esc(c.label)}')">${dot}${esc(c.label)}</div>`;
+  }).join('');
+}
+function toggleColor(id,label){
+  const i=sel.colorIds.indexOf(id);
+  if(i>=0){sel.colorIds.splice(i,1);sel.colorLabels.splice(i,1)}
+  else{sel.colorIds.push(id);sel.colorLabels.push(label)}
+  renderColors();
+}
+
+// ── Conditions ──
+function renderConditions(){
+  const el=document.getElementById('condChips');
+  const conds=catalog.conditions||[];
+  el.innerHTML=conds.map(c=>{
+    const on=sel.conditionIds.includes(c.id)?'on':'';
+    return `<div class="chip ${on}" onclick="toggleCond(${c.id},'${esc(c.short||c.label)}')">${c.icon||''} ${esc(c.short||c.label)}</div>`;
+  }).join('');
+}
+function toggleCond(id,label){
+  const i=sel.conditionIds.indexOf(id);
+  if(i>=0){sel.conditionIds.splice(i,1);sel.conditionLabels.splice(i,1)}
+  else{sel.conditionIds.push(id);sel.conditionLabels.push(label)}
+  renderConditions();
+}
+
+// ── Price ──
+function renderPrice(){
+  document.getElementById('priceFrom').value=sel.priceFrom||'';
+  document.getElementById('priceTo').value=sel.priceTo||'';
+}
+
+// ═══════════════════════════
+//  SAVE FILTER
+// ═══════════════════════════
+async function saveFilter(){
+  collectCurrentStep();
+
+  const query={};
+  if(sel.text) query.text=sel.text;
+  if(sel.genderId) query.catalogIds=[String(sel.genderId)];
+  if(sel.categoryIds.length) query.catalogIds=sel.categoryIds.map(String);
+  if(sel.brandIds.length) query.brandIds=sel.brandIds.map(String);
+  if(sel.sizeIds.length) query.sizeIds=sel.sizeIds.map(String);
+  if(sel.colorIds.length) query.colorIds=sel.colorIds.map(String);
+  if(sel.conditionIds.length) query.statusIds=sel.conditionIds.map(String);
+  if(sel.priceTo) query.priceTo=sel.priceTo;
+  if(sel.priceFrom) query.priceFrom=sel.priceFrom;
+  query._labels={
+    gender:sel.genderLabel||undefined,
+    categories:sel.categoryLabels.length?sel.categoryLabels:undefined,
+    brands:sel.brandLabels.length?sel.brandLabels:undefined,
+    sizes:sel.sizeLabels.length?sel.sizeLabels:undefined,
+    colors:sel.colorLabels.length?sel.colorLabels:undefined,
+    conditions:sel.conditionLabels.length?sel.conditionLabels:undefined,
+  };
+
+  try{
+    const res=await fetch(API+'/api/queries',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(query)
+    });
+    const data=await res.json();
+    if(data.ok){
+      filters=data.queries||[...filters,query];
+      renderFilters();
+      // Switch to list view
+      document.getElementById('listView').style.display='';
+      document.getElementById('createView').classList.remove('active');
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      document.querySelectorAll('.tab')[0].classList.add('active');
+      document.getElementById('bottomBar').innerHTML='<button class="btn btn-primary" onclick="showCreate()">+ Nouveau filtre</button>';
+      if(TG) TG.showAlert('Filtre enregistre !');
+    }
+  }catch(e){
+    console.error(e);
+    if(TG) TG.showAlert('Erreur: '+e.message);
+  }
+}
+
+// ═══════════════════════════
+//  UTILS
+// ═══════════════════════════
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;')}
+
+init();
+</script>
+</body>
+</html>
