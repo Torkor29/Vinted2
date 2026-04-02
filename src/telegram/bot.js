@@ -2679,8 +2679,7 @@ export class TelegramBot {
 
   /**
    * Handles text messages during brand search.
-   * Uses Vinted API as primary source (reference for brand IDs),
-   * falls back to local catalog, and always allows manual add.
+   * Uses Vinted API with multiple query variations, falls back to local catalog.
    */
   async handleBrandSearchText(chatId, userId, text) {
     const conv = this.getConv(userId);
@@ -2689,68 +2688,64 @@ export class TelegramBot {
     const { data, messageId } = conv;
     const searchText = text.trim();
 
-    // Try Vinted API first (primary source of truth for brand IDs)
+    // Build search variations: original, without special chars, compacted
+    const variations = [searchText];
+    const cleaned = searchText.replace(/[&+\-_.]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleaned !== searchText) variations.push(cleaned);
+    const compacted = searchText.replace(/[&\s\-_.+]+/g, '');
+    if (compacted !== searchText && compacted !== cleaned) variations.push(compacted);
+
     let results = [];
-    let apiWorked = false;
-    try {
-      const client = this.sniper?.search?.client;
-      const country = this.sniper?.fullConfig?.countries?.[0] || 'fr';
-      if (client) {
-        // Try original query first
-        let apiResult = await client.request(country, '/catalog/brands', { params: { query: searchText, per_page: 20 } });
-        let brands = apiResult?.brands || apiResult;
 
-        // If no results, try normalized query (remove special chars like &)
-        if ((!Array.isArray(brands) || brands.length === 0) && /[&\-_.]/.test(searchText)) {
-          const normalized = searchText.replace(/[&\-_.]/g, ' ').replace(/\s+/g, ' ').trim();
-          apiResult = await client.request(country, '/catalog/brands', { params: { query: normalized, per_page: 20 } });
-          brands = apiResult?.brands || apiResult;
+    // Try Vinted API with each variation until we get results
+    const client = this.sniper?.search?.client;
+    const country = this.sniper?.fullConfig?.countries?.[0] || 'fr';
+    if (client) {
+      for (const q of variations) {
+        if (results.length > 0) break;
+        try {
+          const apiResult = await client.request(country, '/catalog/brands', { params: { query: q, per_page: 15 } });
+          const brands = apiResult?.brands || apiResult;
+          if (Array.isArray(brands) && brands.length > 0) {
+            results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
+          }
+        } catch (e) {
+          log.warn('Brand API search failed for "%s":', q, e.message);
         }
-
-        if (Array.isArray(brands) && brands.length > 0) {
-          results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
-          apiWorked = true;
-        }
-      } else {
-        await this.logToTopic('warn', `Recherche marque "<b>${escapeHtml(searchText)}</b>" — client API Vinted non disponible, fallback local`);
       }
-    } catch (e) {
-      log.warn('Brand API search failed, falling back to local catalog:', e.message);
-      await this.logToTopic('error', `API marque échouée pour "<b>${escapeHtml(searchText)}</b>": ${escapeHtml(e.message)}`);
     }
 
-    // Fallback to local catalog (fuzzy matching)
+    // Fallback to local catalog with each variation
     if (results.length === 0) {
-      results = searchBrands(searchText);
-      if (results.length > 0) {
-        await this.logToTopic('info', `Marque "<b>${escapeHtml(searchText)}</b>" trouvée via catalogue local: ${results.map(r => r.label).join(', ')}`);
+      for (const q of variations) {
+        results = searchBrands(q);
+        if (results.length > 0) break;
       }
-    } else {
-      await this.logToTopic('info', `Marque "<b>${escapeHtml(searchText)}</b>" trouvée via API Vinted (${results.length} résultats)`);
+    }
+
+    let selectedInfo = '';
+    if (data.brandIds.length > 0) {
+      selectedInfo = `\n\n\u2705 D\u00e9j\u00e0 s\u00e9lectionn\u00e9es : <b>${data.brandLabels.join(', ')}</b>`;
+    }
+
+    if (results.length === 0) {
+      await this.editMessage(chatId, messageId,
+        `\ud83d\udd0d Aucune marque trouv\u00e9e pour "<b>${escapeHtml(searchText)}</b>".\n<i>Essaie un autre mot (ex: "pullbear", "pull bear"...)</i>${selectedInfo}`,
+        { inline_keyboard: [
+          [{ text: '\ud83d\udd0d Autre recherche', callback_data: 'fw:br:search' }],
+          [{ text: '\u21a9\ufe0f Marques populaires', callback_data: 'fw:br:back_popular' }],
+          ...(data.brandIds.length > 0 ? [[{ text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' }]] : []),
+        ]}
+      );
+      conv.command = 'filter_wizard';
+      this.setConv(userId, conv);
+      return;
     }
 
     // Store results for re-rendering after toggle
     data.lastBrandSearch = results.slice(0, 12);
     conv.command = 'filter_wizard';
     this.setConv(userId, conv);
-
-    if (results.length === 0) {
-      // No results at all — show message but let user retry or go back
-      let noResultMsg = `🔍 Aucune marque trouvée pour "<b>${escapeHtml(searchText)}</b>".`;
-      if (data.brandIds.length > 0) {
-        noResultMsg += `\n\n✅ <b>Sélectionnées : ${data.brandLabels.join(', ')}</b>`;
-      }
-      noResultMsg += `\n\n💡 Essaie avec un autre mot-clé (ex: "pull bear" au lieu de "pull&bear").`;
-
-      await this.editMessage(chatId, messageId, noResultMsg,
-        { inline_keyboard: [
-          [{ text: '🔍 Nouvelle recherche', callback_data: 'fw:br:search' }],
-          [{ text: '✅ Valider ▶️', callback_data: 'fw:br:done' }],
-          [{ text: '↩️ Marques populaires', callback_data: 'fw:br:back_popular' }],
-        ]}
-      );
-      return;
-    }
 
     await this._renderBrandSearchResults(chatId, messageId, data);
   }
