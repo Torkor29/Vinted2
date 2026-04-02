@@ -2624,6 +2624,7 @@ export class TelegramBot {
   /**
    * Handles text messages during brand search.
    * Uses Vinted API if available, falls back to local catalog.
+   * Tries multiple query variations to maximize matches.
    */
   async handleBrandSearchText(chatId, userId, text) {
     const conv = this.getConv(userId);
@@ -2631,34 +2632,53 @@ export class TelegramBot {
 
     const { data, messageId } = conv;
 
-    // Try Vinted API first, fall back to local catalog
+    // Build search variations: original, without special chars, compacted
+    const variations = [text];
+    const cleaned = text.replace(/[&+]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleaned !== text) variations.push(cleaned);
+    const compacted = text.replace(/[&\s]+/g, '');
+    if (compacted !== text && compacted !== cleaned) variations.push(compacted);
+
     let results = [];
-    try {
-      const client = this.sniper?.search?.client;
-      const country = this.sniper?.fullConfig?.countries?.[0] || 'fr';
-      if (client) {
-        const apiResult = await client.request(country, '/catalog/brands', { params: { query: text, per_page: 15 } });
-        const brands = apiResult?.brands || apiResult;
-        if (Array.isArray(brands) && brands.length > 0) {
-          results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
+
+    // Try Vinted API with each variation until we get results
+    const client = this.sniper?.search?.client;
+    const country = this.sniper?.fullConfig?.countries?.[0] || 'fr';
+    if (client) {
+      for (const q of variations) {
+        if (results.length > 0) break;
+        try {
+          const apiResult = await client.request(country, '/catalog/brands', { params: { query: q, per_page: 15 } });
+          const brands = apiResult?.brands || apiResult;
+          if (Array.isArray(brands) && brands.length > 0) {
+            results = brands.map(b => ({ id: b.id, label: b.title || b.name }));
+          }
+        } catch (e) {
+          this.log.warn('Brand API search failed for "%s":', q, e.message);
         }
       }
-    } catch (e) {
-      this.log.warn('Brand API search failed, falling back to local catalog:', e.message);
     }
 
-    // Fallback to local catalog
+    // Fallback to local catalog with each variation
     if (results.length === 0) {
-      results = searchBrands(text);
+      for (const q of variations) {
+        results = searchBrands(q);
+        if (results.length > 0) break;
+      }
+    }
+
+    let selectedInfo = '';
+    if (data.brandIds.length > 0) {
+      selectedInfo = `\n\n\u2705 D\u00e9j\u00e0 s\u00e9lectionn\u00e9es : <b>${data.brandLabels.join(', ')}</b>`;
     }
 
     if (results.length === 0) {
       await this.editMessage(chatId, messageId,
-        `\ud83d\udd0d Aucune marque trouv\u00e9e pour "<b>${escapeHtml(text)}</b>".\nR\u00e9essaie ou valide :`,
+        `\ud83d\udd0d Aucune marque trouv\u00e9e pour "<b>${escapeHtml(text)}</b>".\n<i>Essaie un autre mot (ex: "pullbear", "pull bear"...)</i>${selectedInfo}`,
         { inline_keyboard: [
-          [{ text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' }],
           [{ text: '\ud83d\udd0d Autre recherche', callback_data: 'fw:br:search' }],
           [{ text: '\u21a9\ufe0f Marques populaires', callback_data: 'fw:br:back_popular' }],
+          ...(data.brandIds.length > 0 ? [[{ text: '\u2705 Valider \u25b6\ufe0f', callback_data: 'fw:br:done' }]] : []),
         ]}
       );
       conv.command = 'filter_wizard';
