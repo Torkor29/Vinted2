@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://vinted:vinted@db:5432/vintedbot
+      - REDIS_URL=redis://redis:6379
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - TELEGRAM_GROUP_ID=${TELEGRAM_GROUP_ID}
+      - WEBAPP_URL=${WEBAPP_URL}
+      - API_URL=${API_URL}
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - PROXY_LIST=${PROXY_LIST}
+      - VINTED_DOMAIN=${VINTED_DOMAIN:-www.vinted.fr}
+      - DEFAULT_SCAN_INTERVAL=${DEFAULT_SCAN_INTERVAL:-3}
+      - MAX_FILTERS_PER_USER=${MAX_FILTERS_PER_USER:-5}
+      - PEPITE_DEFAULT_THRESHOLD=${PEPITE_DEFAULT_THRESHOLD:-0.30}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vintedbot
+      POSTGRES_USER: vinted
+      POSTGRES_PASSWORD: vinted
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/src/db/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vinted -d vintedbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - backend
+      - webapp
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

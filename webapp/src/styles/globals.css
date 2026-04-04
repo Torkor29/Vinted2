@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  --bg-color: var(--tg-theme-bg-color, #ffffff);
+  --text-color: var(--tg-theme-text-color, #000000);
+  --hint-color: var(--tg-theme-hint-color, #999999);
+  --link-color: var(--tg-theme-link-color, #2481cc);
+  --button-color: var(--tg-theme-button-color, #2481cc);
+  --button-text-color: var(--tg-theme-button-text-color, #ffffff);
+  --secondary-bg-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+  --header-bg-color: var(--tg-theme-header-bg-color, #ffffff);
+  --accent-text-color: var(--tg-theme-accent-text-color, #2481cc);
+  --section-bg-color: var(--tg-theme-section-bg-color, #ffffff);
+  --section-header-text-color: var(--tg-theme-section-header-text-color, #6d6d72);
+  --subtitle-text-color: var(--tg-theme-subtitle-text-color, #999999);
+  --destructive-text-color: var(--tg-theme-destructive-text-color, #ff3b30);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+.app {
+  min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hint-color);
+  border-radius: 2px;
+}
+
+/* Utility classes for Telegram theme */
+.bg-tg {
+  background-color: var(--bg-color);
+}
+
+.bg-tg-secondary {
+  background-color: var(--secondary-bg-color);
+}
+
+.bg-tg-section {
+  background-color: var(--section-bg-color);
+}
+
+.bg-tg-button {
+  background-color: var(--button-color);
+}
+
+.text-tg {
+  color: var(--text-color);
+}
+
+.text-tg-hint {
+  color: var(--hint-color);
+}
+
+.text-tg-link {
+  color: var(--link-color);
+}
+
+.text-tg-button {
+  color: var(--button-text-color);
+}
+
+.text-tg-accent {
+  color: var(--accent-text-color);
+}
+
+.text-tg-subtitle {
+  color: var(--subtitle-text-color);
+}
+
+.text-tg-section-header {
+  color: var(--section-header-text-color);
+}
+
+.text-tg-destructive {
+  color: var(--destructive-text-color);
+}
