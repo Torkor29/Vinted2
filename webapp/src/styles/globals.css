@@ -1,27 +1,28 @@
 @import "tailwindcss";
 
-/* Force dark theme — ignore Telegram's light theme */
+/* ─── Premium dark theme ─────────────────────────────────────────── */
 :root {
-  --bg-color: #0d0d1a;
-  --text-color: #f0f0f0;
-  --hint-color: #6b6b82;
-  --link-color: #7c6fe0;
+  --bg-color: #080810;
+  --section-bg-color: #10101e;
+  --secondary-bg-color: #18182a;
+  --text-color: #f1f1f3;
+  --hint-color: #60607a;
+  --link-color: #9d8df5;
   --button-color: #6c5ce7;
   --button-text-color: #ffffff;
-  --secondary-bg-color: #16162a;
-  --header-bg-color: #12123a;
-  --accent-text-color: #a29bfe;
-  --section-bg-color: #1a1a2e;
-  --section-header-text-color: #5a5a72;
-  --subtitle-text-color: #6b6b82;
+  --accent-text-color: #9d8df5;
+  --header-bg-color: #0c0c1a;
+  --section-header-text-color: #60607a;
+  --subtitle-text-color: #60607a;
   --destructive-text-color: #e55757;
-  --card-border: rgba(108, 92, 231, 0.18);
-  --success-color: #00b894;
+  --card-border: rgba(255, 255, 255, 0.06);
+  --success-color: #00d68f;
   --warning-color: #fdcb6e;
   --pepite-color: #ffd32a;
   --pepite-bg: rgba(255, 211, 42, 0.12);
 }
 
+/* ─── Reset ──────────────────────────────────────────────────────── */
 * {
   margin: 0;
   padding: 0;
@@ -52,46 +53,48 @@ body {
   background-color: var(--bg-color);
 }
 
-/* Hide scrollbar but keep scroll */
+/* ─── Scrollbar ──────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 0; height: 0; }
-
-/* No scrollbar utility */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
-/* Inputs mobile-friendly */
+/* ─── Inputs ─────────────────────────────────────────────────────── */
 input, select, textarea {
-  font-size: 16px !important; /* prevents iOS zoom on focus */
+  font-size: 16px !important;
   -webkit-appearance: none;
   appearance: none;
 }
-
 input[type="range"] {
   -webkit-appearance: auto;
   appearance: auto;
   accent-color: var(--button-color);
 }
 
-/* Telegram theme utility classes */
-.bg-tg { background-color: var(--bg-color); }
-.bg-tg-secondary { background-color: var(--secondary-bg-color); }
-.bg-tg-section { background-color: var(--section-bg-color); }
-.bg-tg-button { background-color: var(--button-color); }
-.text-tg { color: var(--text-color); }
-.text-tg-hint { color: var(--hint-color); }
-.text-tg-link { color: var(--link-color); }
-.text-tg-button { color: var(--button-text-color); }
-.text-tg-accent { color: var(--accent-text-color); }
-.text-tg-subtitle { color: var(--subtitle-text-color); }
+/* ─── Utility classes ────────────────────────────────────────────── */
+.bg-tg            { background-color: var(--bg-color); }
+.bg-tg-secondary  { background-color: var(--secondary-bg-color); }
+.bg-tg-section    { background-color: var(--section-bg-color); }
+.bg-tg-button     { background-color: var(--button-color); }
+
+.text-tg               { color: var(--text-color); }
+.text-tg-hint          { color: var(--hint-color); }
+.text-tg-link          { color: var(--link-color); }
+.text-tg-button        { color: var(--button-text-color); }
+.text-tg-accent        { color: var(--accent-text-color); }
+.text-tg-subtitle      { color: var(--subtitle-text-color); }
 .text-tg-section-header { color: var(--section-header-text-color); }
-.text-tg-destructive { color: var(--destructive-text-color); }
+.text-tg-destructive   { color: var(--destructive-text-color); }
+
 .border-tg { border-color: var(--card-border); }
 
-/* Glow effects */
-.glow-purple { box-shadow: 0 0 24px rgba(108, 92, 231, 0.25); }
-.glow-green { box-shadow: 0 0 24px rgba(0, 184, 148, 0.25); }
-.glow-pepite { box-shadow: 0 0 24px rgba(255, 211, 42, 0.25); }
+/* ─── Glow effects ───────────────────────────────────────────────── */
+.glow-purple { box-shadow: 0 0 32px rgba(108, 92, 231, 0.3); }
+.glow-green  { box-shadow: 0 0 32px rgba(0, 214, 143, 0.25); }
+.glow-pepite { box-shadow: 0 0 32px rgba(255, 211, 42, 0.2); }
 
-/* Card interactive state */
+/* ─── Divider ────────────────────────────────────────────────────── */
+.divider { height: 1px; background: var(--card-border); }
+
+/* ─── Card press state ───────────────────────────────────────────── */
 .card-press { transition: transform 0.1s ease, opacity 0.1s ease; }
 .card-press:active { transform: scale(0.98); opacity: 0.85; }
