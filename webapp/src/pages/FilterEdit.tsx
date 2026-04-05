@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useFilter, useCreateFilter, useUpdateFilter } from '../hooks/useFilters.js';
 import { useBackButton, useMainButton } from '../hooks/useTelegram.js';
 import { hapticNotification, hapticFeedback } from '../utils/telegram.js';
@@ -43,9 +43,8 @@ export default function FilterEdit() {
   const { data: existingFilter } = useFilter(id);
   const createFilter = useCreateFilter();
   const updateFilter = useUpdateFilter();
-
   const [form, setForm] = useState<FormState>(defaultForm);
-  const [openSection, setOpenSection] = useState<string | null>('basic');
+  const [openSection, setOpenSection] = useState<string | null>(null);
 
   useEffect(() => {
     if (existingFilter) {
@@ -72,10 +71,8 @@ export default function FilterEdit() {
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) { hapticNotification('error'); return; }
-
     const input = {
-      name: form.name,
-      search_text: form.search_text || null,
+      name: form.name, search_text: form.search_text || null,
       catalog_ids: form.catalog_ids.length > 0 ? form.catalog_ids : null,
       brand_ids: form.brands.length > 0 ? form.brands.map(b => b.id) : null,
       size_ids: form.size_ids.length > 0 ? form.size_ids : null,
@@ -85,230 +82,210 @@ export default function FilterEdit() {
       sort_by: form.sort_by, scan_interval_seconds: form.scan_interval_seconds,
       pepite_enabled: form.pepite_enabled, pepite_threshold: form.pepite_threshold,
     };
-
     try {
-      if (isEditing && id) {
-        await updateFilter.mutateAsync({ id, ...input });
-      } else {
-        await createFilter.mutateAsync(input);
-      }
-      hapticNotification('success');
-      navigate('/filters');
+      if (isEditing && id) { await updateFilter.mutateAsync({ id, ...input }); }
+      else { await createFilter.mutateAsync(input); }
+      hapticNotification('success'); navigate('/filters');
     } catch { hapticNotification('error'); }
   }, [form, isEditing, id, createFilter, updateFilter, navigate]);
 
-  useMainButton(isEditing ? 'Enregistrer' : 'Créer le filtre', handleSave, form.name.trim().length > 0);
+  useMainButton(isEditing ? 'Enregistrer' : 'Creer le filtre', handleSave, form.name.trim().length > 0);
 
-  const toggle = (key: string) => {
-    hapticFeedback('light');
-    setOpenSection(prev => prev === key ? null : key);
-  };
+  const toggle = (key: string) => { hapticFeedback('light'); setOpenSection(prev => prev === key ? null : key); };
 
-  const badgeCount = (n: number) => n > 0 ? (
-    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-      style={{ backgroundColor: 'var(--button-color)', color: '#fff' }}>
-      {n}
-    </span>
+  const Badge = ({ n }: { n: number }) => n > 0 ? (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+      background: 'var(--button-color)', color: '#fff', marginLeft: 6,
+    }}>{n}</span>
   ) : null;
 
-  const Section = ({
-    id: sId, title, badge, children,
-  }: { id: string; title: string; badge?: React.ReactNode; children: React.ReactNode }) => {
+  const Section = ({ sId, title, badge, children }: { sId: string; title: string; badge?: React.ReactNode; children: React.ReactNode }) => {
     const open = openSection === sId;
     return (
-      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--section-bg-color)', border: '1px solid var(--card-border)' }}>
-        <button
-          type="button"
-          onClick={() => toggle(sId)}
-          className="w-full flex items-center justify-between px-4 py-3.5 transition-opacity active:opacity-70"
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-color)' }}>{title}</span>
+      <div style={{
+        background: 'var(--section-bg-color)', border: '1px solid var(--card-border)',
+        borderRadius: 16, overflow: 'hidden', marginBottom: 8,
+      }}>
+        <button type="button" onClick={() => toggle(sId)} style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
             {badge}
           </div>
           {open
             ? <ChevronDown size={16} style={{ color: 'var(--hint-color)' }} />
-            : <ChevronRight size={16} style={{ color: 'var(--hint-color)' }} />
-          }
+            : <ChevronRight size={16} style={{ color: 'var(--hint-color)' }} />}
         </button>
         {open && (
-          <div className="px-4 pb-4 pt-0" style={{ borderTop: '1px solid var(--card-border)' }}>
-            <div className="pt-3">{children}</div>
+          <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--card-border)' }}>
+            <div style={{ paddingTop: 12 }}>{children}</div>
           </div>
         )}
       </div>
     );
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '14px 16px', borderRadius: 14,
+    background: 'var(--secondary-bg-color)', color: 'var(--text-color)',
+    border: '1px solid var(--card-border)', fontSize: 15, outline: 'none',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const,
+    letterSpacing: 0.5, color: 'var(--hint-color)', marginBottom: 6, display: 'block',
+  };
+
   return (
-    <div style={{ backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--bg-color)', minHeight: '100vh' }}>
       {/* Header */}
-      <div className="px-4 pt-5 pb-4" style={{ borderBottom: '1px solid var(--card-border)' }}>
-        <h1 className="text-lg font-bold" style={{ color: 'var(--text-color)' }}>
+      <div style={{ padding: '20px 16px 16px', borderBottom: '1px solid var(--card-border)' }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-color)' }}>
           {isEditing ? 'Modifier le filtre' : 'Nouveau filtre'}
         </h1>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--hint-color)' }}>
-          {isEditing ? 'Modifie les critères de recherche' : 'Configure tes critères de surveillance'}
+        <p style={{ fontSize: 12, color: 'var(--hint-color)', marginTop: 4 }}>
+          {isEditing ? 'Modifie les criteres de recherche' : 'Configure tes criteres de surveillance'}
         </p>
       </div>
 
-      <div className="px-4 py-4 space-y-2 pb-32">
-
-        {/* ── Name + search — always visible ───────────────────────── */}
-        <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: 'var(--section-bg-color)', border: '1px solid var(--card-border)' }}>
-          <div>
-            <label className="text-[10px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: 'var(--hint-color)' }}>
-              Nom du filtre *
-            </label>
+      <div style={{ padding: '16px 16px 120px' }}>
+        {/* Name + search — always visible */}
+        <div style={{
+          background: 'var(--section-bg-color)', border: '1px solid var(--card-border)',
+          borderRadius: 16, padding: 16, marginBottom: 8,
+        }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Nom du filtre *</label>
             <input
-              type="text"
-              value={form.name}
+              type="text" value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Ex: Nike Air Max"
-              className="w-full rounded-xl px-3.5 py-3 text-sm outline-none border transition-colors"
-              style={{
-                backgroundColor: 'var(--secondary-bg-color)',
-                color: 'var(--text-color)',
+              placeholder="Ex: Nike Air Max" style={{
+                ...inputStyle,
                 borderColor: form.name ? 'var(--button-color)' : 'var(--card-border)',
               }}
             />
           </div>
           <div>
-            <label className="text-[10px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: 'var(--hint-color)' }}>
-              Mots-clés de recherche
-            </label>
+            <label style={labelStyle}>Mots-cles de recherche</label>
             <input
-              type="text"
-              value={form.search_text}
+              type="text" value={form.search_text}
               onChange={(e) => setForm({ ...form, search_text: e.target.value })}
-              placeholder="Ex: air max 90 taille 42"
-              className="w-full rounded-xl px-3.5 py-3 text-sm outline-none border"
-              style={{
-                backgroundColor: 'var(--secondary-bg-color)',
-                color: 'var(--text-color)',
-                borderColor: 'var(--card-border)',
-              }}
+              placeholder="Ex: air max 90 taille 42" style={inputStyle}
             />
           </div>
         </div>
 
-        {/* ── Sections ─────────────────────────────────────────────── */}
-        <Section id="categories" title="Catégories" badge={badgeCount(form.catalog_ids.length)}>
+        {/* Accordion sections */}
+        <Section sId="categories" title="Categories" badge={<Badge n={form.catalog_ids.length} />}>
           <CategoryPicker selected={form.catalog_ids} onChange={(ids) => setForm({ ...form, catalog_ids: ids })} />
         </Section>
 
-        <Section id="brands" title="Marques" badge={badgeCount(form.brands.length)}>
+        <Section sId="brands" title="Marques" badge={<Badge n={form.brands.length} />}>
           <BrandSearch selected={form.brands} onChange={(brands) => setForm({ ...form, brands })} />
         </Section>
 
-        <Section id="sizes" title="Tailles" badge={badgeCount(form.size_ids.length)}>
+        <Section sId="sizes" title="Tailles" badge={<Badge n={form.size_ids.length} />}>
           <SizePicker selected={form.size_ids} onChange={(ids) => setForm({ ...form, size_ids: ids })} />
         </Section>
 
-        <Section id="colors" title="Couleurs" badge={badgeCount(form.color_ids.length)}>
+        <Section sId="colors" title="Couleurs" badge={<Badge n={form.color_ids.length} />}>
           <ColorPicker selected={form.color_ids} onChange={(ids) => setForm({ ...form, color_ids: ids })} />
         </Section>
 
-        <Section id="condition" title="État de l'article" badge={badgeCount(form.status_ids.length)}>
+        <Section sId="condition" title="Etat de l'article" badge={<Badge n={form.status_ids.length} />}>
           <ConditionPicker selected={form.status_ids} onChange={(ids) => setForm({ ...form, status_ids: ids })} />
         </Section>
 
-        <Section
-          id="price"
-          title="Fourchette de prix"
-          badge={form.price_from || form.price_to ? (
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--secondary-bg-color)', color: 'var(--accent-text-color)' }}>
+        <Section sId="price" title="Fourchette de prix" badge={
+          (form.price_from || form.price_to) ? (
+            <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 10, background: 'var(--secondary-bg-color)', color: 'var(--accent-text-color)', marginLeft: 6 }}>
               {form.price_from ?? 0} – {form.price_to ?? '∞'} €
             </span>
-          ) : undefined}
-        >
+          ) : undefined
+        }>
           <PriceRange min={form.price_from} max={form.price_to} onChange={(min, max) => setForm({ ...form, price_from: min, price_to: max })} />
         </Section>
 
-        {/* ── Pépite toggle + settings ─────────────────────────────── */}
-        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--section-bg-color)', border: '1px solid var(--card-border)' }}>
-          {/* Pepite row */}
-          <div className="flex items-center justify-between px-4 py-3.5">
+        {/* Pepite detection */}
+        <div style={{
+          background: 'var(--section-bg-color)', border: '1px solid var(--card-border)',
+          borderRadius: 16, overflow: 'hidden', marginBottom: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
             <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-color)' }}>Détection Pépites</div>
-              <div className="text-[10px] mt-0.5" style={{ color: 'var(--hint-color)' }}>
-                Alerter si {Math.round(form.pepite_threshold * 100)}% sous le prix du marché
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-color)' }}>
+                Detection Pepites 💎
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--hint-color)', marginTop: 2 }}>
+                Alerter si {Math.round(form.pepite_threshold * 100)}% sous le marche
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, pepite_enabled: !form.pepite_enabled })}
-              className="relative flex-shrink-0 rounded-full transition-colors"
-              style={{
-                width: 44, height: 26,
-                backgroundColor: form.pepite_enabled ? 'var(--success-color)' : 'var(--secondary-bg-color)',
-              }}
-            >
-              <span
-                className="absolute top-0.5 w-[22px] h-[22px] bg-white rounded-full shadow transition-transform"
-                style={{ left: form.pepite_enabled ? 20 : 2 }}
-              />
+            <button type="button" onClick={() => setForm({ ...form, pepite_enabled: !form.pepite_enabled })} style={{
+              width: 48, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer', position: 'relative',
+              background: form.pepite_enabled ? 'var(--success-color)' : '#333', transition: 'background 0.2s',
+              flexShrink: 0,
+            }}>
+              <span style={{
+                position: 'absolute', top: 2, width: 24, height: 24, borderRadius: 12,
+                background: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                transition: 'transform 0.2s', transform: form.pepite_enabled ? 'translateX(22px)' : 'translateX(2px)',
+              }} />
             </button>
           </div>
 
-          {/* Threshold slider */}
           {form.pepite_enabled && (
-            <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid var(--card-border)' }}>
-              <div className="flex justify-between text-[10px] mb-2 mt-2" style={{ color: 'var(--hint-color)' }}>
-                <span>Seuil minimum</span>
-                <span style={{ color: 'var(--pepite-color)', fontWeight: 700 }}>
-                  -{Math.round(form.pepite_threshold * 100)}%
-                </span>
+            <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--card-border)' }}>
+              <div style={{ paddingTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--hint-color)' }}>Seuil minimum</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--pepite-color)' }}>
+                    -{Math.round(form.pepite_threshold * 100)}%
+                  </span>
+                </div>
+                <input type="range" min="10" max="70"
+                  value={form.pepite_threshold * 100}
+                  onChange={(e) => setForm({ ...form, pepite_threshold: parseInt(e.target.value) / 100 })}
+                  style={{ width: '100%' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--hint-color)', marginTop: 4 }}>
+                  <span>-10%</span><span>-70%</span>
+                </div>
               </div>
-              <input
-                type="range" min="10" max="70"
-                value={form.pepite_threshold * 100}
-                onChange={(e) => setForm({ ...form, pepite_threshold: parseInt(e.target.value) / 100 })}
-                className="w-full"
-              />
             </div>
           )}
         </div>
 
-        {/* ── Advanced settings ────────────────────────────────────── */}
-        <Section id="settings" title="Paramètres avancés">
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-[10px] mb-2" style={{ color: 'var(--hint-color)' }}>
-                <span>Fréquence de scan</span>
-                <span style={{ color: 'var(--text-color)', fontWeight: 600 }}>toutes les {form.scan_interval_seconds}s</span>
-              </div>
-              <input type="range" min="3" max="60" value={form.scan_interval_seconds}
-                onChange={(e) => setForm({ ...form, scan_interval_seconds: parseInt(e.target.value) })} className="w-full" />
+        {/* Advanced settings */}
+        <Section sId="advanced" title="Parametres avances">
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--hint-color)' }}>Intervalle de scan</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-text-color)' }}>
+                {form.scan_interval_seconds}s
+              </span>
             </div>
+            <input type="range" min="3" max="60"
+              value={form.scan_interval_seconds}
+              onChange={(e) => setForm({ ...form, scan_interval_seconds: parseInt(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--hint-color)', marginTop: 4 }}>
+              <span>3s (rapide)</span><span>60s (lent)</span>
+            </div>
+          </div>
 
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wide block mb-2" style={{ color: 'var(--hint-color)' }}>
-                Trier par
-              </label>
-              <div className="grid grid-cols-1 gap-1.5">
-                {[
-                  { value: 'newest_first', label: 'Plus récents en premier' },
-                  { value: 'price_low_to_high', label: 'Prix croissant' },
-                  { value: 'price_high_to_low', label: 'Prix décroissant' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setForm({ ...form, sort_by: opt.value })}
-                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition-colors active:opacity-70"
-                    style={{
-                      backgroundColor: form.sort_by === opt.value ? 'rgba(108, 92, 231, 0.15)' : 'var(--secondary-bg-color)',
-                      color: form.sort_by === opt.value ? 'var(--button-color)' : 'var(--text-color)',
-                      border: `1px solid ${form.sort_by === opt.value ? 'rgba(108,92,231,0.3)' : 'transparent'}`,
-                    }}
-                  >
-                    <span>{opt.label}</span>
-                    {form.sort_by === opt.value && <Check size={14} style={{ color: 'var(--button-color)' }} />}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div>
+            <label style={labelStyle}>Ordre de tri</label>
+            <select value={form.sort_by} onChange={(e) => setForm({ ...form, sort_by: e.target.value })}
+              style={{ ...inputStyle, appearance: 'none' as const }}>
+              <option value="newest_first">Plus recents d'abord</option>
+              <option value="price_low_to_high">Prix croissant</option>
+              <option value="price_high_to_low">Prix decroissant</option>
+              <option value="relevance">Pertinence</option>
+            </select>
           </div>
         </Section>
       </div>
