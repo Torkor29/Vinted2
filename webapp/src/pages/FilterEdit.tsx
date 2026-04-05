@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { useFilter, useCreateFilter, useUpdateFilter } from '../hooks/useFilters.js';
 import { useBackButton, useMainButton } from '../hooks/useTelegram.js';
-import { hapticNotification } from '../utils/telegram.js';
+import { hapticNotification, hapticFeedback } from '../utils/telegram.js';
 import CategoryPicker from '../components/CategoryPicker.js';
 import BrandSearch from '../components/BrandSearch.js';
 import SizePicker from '../components/SizePicker.js';
@@ -96,118 +97,221 @@ export default function FilterEdit() {
     } catch { hapticNotification('error'); }
   }, [form, isEditing, id, createFilter, updateFilter, navigate]);
 
-  useMainButton(isEditing ? 'Enregistrer' : 'Creer le filtre', handleSave, form.name.trim().length > 0);
+  useMainButton(isEditing ? 'Enregistrer' : 'Créer le filtre', handleSave, form.name.trim().length > 0);
 
-  const toggleSection = (key: string) => {
-    setOpenSection(openSection === key ? null : key);
+  const toggle = (key: string) => {
+    hapticFeedback('light');
+    setOpenSection(prev => prev === key ? null : key);
   };
 
-  const Section = ({ id: sId, title, badge, children }: { id: string; title: string; badge?: string; children: React.ReactNode }) => (
-    <div className="bg-tg-section rounded-xl border border-[var(--card-border)] overflow-hidden">
-      <button
-        type="button"
-        onClick={() => toggleSection(sId)}
-        className="w-full px-3 py-2.5 flex items-center justify-between active:bg-tg-secondary transition-colors"
-      >
-        <span className="text-xs font-semibold text-tg">{title}</span>
-        <div className="flex items-center gap-2">
-          {badge && <span className="text-[10px] text-tg-accent bg-tg-secondary px-1.5 py-0.5 rounded">{badge}</span>}
-          <span className="text-tg-hint text-[10px]">{openSection === sId ? '▼' : '▶'}</span>
-        </div>
-      </button>
-      {openSection === sId && (
-        <div className="px-3 pb-3 border-t border-[var(--card-border)]  pt-3">{children}</div>
-      )}
-    </div>
-  );
+  const badgeCount = (n: number) => n > 0 ? (
+    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+      style={{ backgroundColor: 'var(--button-color)', color: '#fff' }}>
+      {n}
+    </span>
+  ) : null;
+
+  const Section = ({
+    id: sId, title, badge, children,
+  }: { id: string; title: string; badge?: React.ReactNode; children: React.ReactNode }) => {
+    const open = openSection === sId;
+    return (
+      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--section-bg-color)', border: '1px solid var(--card-border)' }}>
+        <button
+          type="button"
+          onClick={() => toggle(sId)}
+          className="w-full flex items-center justify-between px-4 py-3.5 transition-opacity active:opacity-70"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-color)' }}>{title}</span>
+            {badge}
+          </div>
+          {open
+            ? <ChevronDown size={16} style={{ color: 'var(--hint-color)' }} />
+            : <ChevronRight size={16} style={{ color: 'var(--hint-color)' }} />
+          }
+        </button>
+        {open && (
+          <div className="px-4 pb-4 pt-0" style={{ borderTop: '1px solid var(--card-border)' }}>
+            <div className="pt-3">{children}</div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className="px-4 pt-4 pb-24 max-w-full overflow-hidden space-y-2">
-      <h1 className="text-lg font-bold text-tg mb-3">
-        {isEditing ? 'Modifier le filtre' : 'Nouveau filtre'}
-      </h1>
+    <div style={{ backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+      {/* Header */}
+      <div className="px-4 pt-5 pb-4" style={{ borderBottom: '1px solid var(--card-border)' }}>
+        <h1 className="text-lg font-bold" style={{ color: 'var(--text-color)' }}>
+          {isEditing ? 'Modifier le filtre' : 'Nouveau filtre'}
+        </h1>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--hint-color)' }}>
+          {isEditing ? 'Modifie les critères de recherche' : 'Configure tes critères de surveillance'}
+        </p>
+      </div>
 
-      <Section id="basic" title="Informations de base">
-        <div className="space-y-3">
+      <div className="px-4 py-4 space-y-2 pb-32">
+
+        {/* ── Name + search — always visible ───────────────────────── */}
+        <div className="rounded-2xl p-4 space-y-3" style={{ backgroundColor: 'var(--section-bg-color)', border: '1px solid var(--card-border)' }}>
           <div>
-            <label className="text-[10px] text-tg-hint block mb-1">Nom du filtre *</label>
+            <label className="text-[10px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: 'var(--hint-color)' }}>
+              Nom du filtre *
+            </label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Ex: Nike pas cher"
-              className="w-full bg-tg-secondary rounded-lg px-3 py-2 text-sm text-tg outline-none border border-transparent focus:border-[var(--button-color)]"
+              placeholder="Ex: Nike Air Max"
+              className="w-full rounded-xl px-3.5 py-3 text-sm outline-none border transition-colors"
+              style={{
+                backgroundColor: 'var(--secondary-bg-color)',
+                color: 'var(--text-color)',
+                borderColor: form.name ? 'var(--button-color)' : 'var(--card-border)',
+              }}
             />
           </div>
           <div>
-            <label className="text-[10px] text-tg-hint block mb-1">Recherche</label>
+            <label className="text-[10px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: 'var(--hint-color)' }}>
+              Mots-clés de recherche
+            </label>
             <input
               type="text"
               value={form.search_text}
               onChange={(e) => setForm({ ...form, search_text: e.target.value })}
-              placeholder="Ex: air max 90"
-              className="w-full bg-tg-secondary rounded-lg px-3 py-2 text-sm text-tg outline-none border border-transparent focus:border-[var(--button-color)]"
+              placeholder="Ex: air max 90 taille 42"
+              className="w-full rounded-xl px-3.5 py-3 text-sm outline-none border"
+              style={{
+                backgroundColor: 'var(--secondary-bg-color)',
+                color: 'var(--text-color)',
+                borderColor: 'var(--card-border)',
+              }}
             />
           </div>
         </div>
-      </Section>
 
-      <Section id="categories" title="Categories" badge={form.catalog_ids.length > 0 ? `${form.catalog_ids.length}` : undefined}>
-        <CategoryPicker selected={form.catalog_ids} onChange={(ids) => setForm({ ...form, catalog_ids: ids })} />
-      </Section>
+        {/* ── Sections ─────────────────────────────────────────────── */}
+        <Section id="categories" title="Catégories" badge={badgeCount(form.catalog_ids.length)}>
+          <CategoryPicker selected={form.catalog_ids} onChange={(ids) => setForm({ ...form, catalog_ids: ids })} />
+        </Section>
 
-      <Section id="brands" title="Marques" badge={form.brands.length > 0 ? `${form.brands.length}` : undefined}>
-        <BrandSearch selected={form.brands} onChange={(brands) => setForm({ ...form, brands })} />
-      </Section>
+        <Section id="brands" title="Marques" badge={badgeCount(form.brands.length)}>
+          <BrandSearch selected={form.brands} onChange={(brands) => setForm({ ...form, brands })} />
+        </Section>
 
-      <Section id="sizes" title="Tailles" badge={form.size_ids.length > 0 ? `${form.size_ids.length}` : undefined}>
-        <SizePicker selected={form.size_ids} onChange={(ids) => setForm({ ...form, size_ids: ids })} />
-      </Section>
+        <Section id="sizes" title="Tailles" badge={badgeCount(form.size_ids.length)}>
+          <SizePicker selected={form.size_ids} onChange={(ids) => setForm({ ...form, size_ids: ids })} />
+        </Section>
 
-      <Section id="colors" title="Couleurs" badge={form.color_ids.length > 0 ? `${form.color_ids.length}` : undefined}>
-        <ColorPicker selected={form.color_ids} onChange={(ids) => setForm({ ...form, color_ids: ids })} />
-      </Section>
+        <Section id="colors" title="Couleurs" badge={badgeCount(form.color_ids.length)}>
+          <ColorPicker selected={form.color_ids} onChange={(ids) => setForm({ ...form, color_ids: ids })} />
+        </Section>
 
-      <Section id="condition" title="Etat" badge={form.status_ids.length > 0 ? `${form.status_ids.length}` : undefined}>
-        <ConditionPicker selected={form.status_ids} onChange={(ids) => setForm({ ...form, status_ids: ids })} />
-      </Section>
+        <Section id="condition" title="État de l'article" badge={badgeCount(form.status_ids.length)}>
+          <ConditionPicker selected={form.status_ids} onChange={(ids) => setForm({ ...form, status_ids: ids })} />
+        </Section>
 
-      <Section id="price" title="Prix" badge={form.price_from || form.price_to ? `${form.price_from ?? 0}-${form.price_to ?? '∞'}` : undefined}>
-        <PriceRange min={form.price_from} max={form.price_to} onChange={(min, max) => setForm({ ...form, price_from: min, price_to: max })} />
-      </Section>
+        <Section
+          id="price"
+          title="Fourchette de prix"
+          badge={form.price_from || form.price_to ? (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--secondary-bg-color)', color: 'var(--accent-text-color)' }}>
+              {form.price_from ?? 0} – {form.price_to ?? '∞'} €
+            </span>
+          ) : undefined}
+        >
+          <PriceRange min={form.price_from} max={form.price_to} onChange={(min, max) => setForm({ ...form, price_from: min, price_to: max })} />
+        </Section>
 
-      <Section id="settings" title="Parametres">
-        <div className="space-y-3">
-          <div>
-            <label className="text-[10px] text-tg-hint block mb-1">Intervalle : {form.scan_interval_seconds}s</label>
-            <input type="range" min="3" max="60" value={form.scan_interval_seconds}
-              onChange={(e) => setForm({ ...form, scan_interval_seconds: parseInt(e.target.value) })} className="w-full" />
-          </div>
-          <div>
-            <label className="text-[10px] text-tg-hint block mb-1">Tri</label>
-            <select value={form.sort_by} onChange={(e) => setForm({ ...form, sort_by: e.target.value })}
-              className="w-full bg-tg-secondary rounded-lg px-3 py-2 text-sm text-tg outline-none border border-transparent">
-              <option value="newest_first">Plus recents</option>
-              <option value="price_low_to_high">Prix croissant</option>
-              <option value="price_high_to_low">Prix decroissant</option>
-            </select>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-tg">Detection pepites 💎</span>
-            <button type="button" onClick={() => setForm({ ...form, pepite_enabled: !form.pepite_enabled })}
-              className={`w-11 h-6 rounded-full relative flex-shrink-0 transition-colors ${form.pepite_enabled ? 'bg-[var(--success-color)]' : 'bg-gray-600'}`}>
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.pepite_enabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+        {/* ── Pépite toggle + settings ─────────────────────────────── */}
+        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--section-bg-color)', border: '1px solid var(--card-border)' }}>
+          {/* Pepite row */}
+          <div className="flex items-center justify-between px-4 py-3.5">
+            <div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--text-color)' }}>Détection Pépites</div>
+              <div className="text-[10px] mt-0.5" style={{ color: 'var(--hint-color)' }}>
+                Alerter si {Math.round(form.pepite_threshold * 100)}% sous le prix du marché
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, pepite_enabled: !form.pepite_enabled })}
+              className="relative flex-shrink-0 rounded-full transition-colors"
+              style={{
+                width: 44, height: 26,
+                backgroundColor: form.pepite_enabled ? 'var(--success-color)' : 'var(--secondary-bg-color)',
+              }}
+            >
+              <span
+                className="absolute top-0.5 w-[22px] h-[22px] bg-white rounded-full shadow transition-transform"
+                style={{ left: form.pepite_enabled ? 20 : 2 }}
+              />
             </button>
           </div>
+
+          {/* Threshold slider */}
           {form.pepite_enabled && (
-            <div>
-              <label className="text-[10px] text-tg-hint block mb-1">Seuil : {Math.round(form.pepite_threshold * 100)}% sous le marche</label>
-              <input type="range" min="10" max="70" value={form.pepite_threshold * 100}
-                onChange={(e) => setForm({ ...form, pepite_threshold: parseInt(e.target.value) / 100 })} className="w-full" />
+            <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid var(--card-border)' }}>
+              <div className="flex justify-between text-[10px] mb-2 mt-2" style={{ color: 'var(--hint-color)' }}>
+                <span>Seuil minimum</span>
+                <span style={{ color: 'var(--pepite-color)', fontWeight: 700 }}>
+                  -{Math.round(form.pepite_threshold * 100)}%
+                </span>
+              </div>
+              <input
+                type="range" min="10" max="70"
+                value={form.pepite_threshold * 100}
+                onChange={(e) => setForm({ ...form, pepite_threshold: parseInt(e.target.value) / 100 })}
+                className="w-full"
+              />
             </div>
           )}
         </div>
-      </Section>
+
+        {/* ── Advanced settings ────────────────────────────────────── */}
+        <Section id="settings" title="Paramètres avancés">
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-[10px] mb-2" style={{ color: 'var(--hint-color)' }}>
+                <span>Fréquence de scan</span>
+                <span style={{ color: 'var(--text-color)', fontWeight: 600 }}>toutes les {form.scan_interval_seconds}s</span>
+              </div>
+              <input type="range" min="3" max="60" value={form.scan_interval_seconds}
+                onChange={(e) => setForm({ ...form, scan_interval_seconds: parseInt(e.target.value) })} className="w-full" />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide block mb-2" style={{ color: 'var(--hint-color)' }}>
+                Trier par
+              </label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {[
+                  { value: 'newest_first', label: 'Plus récents en premier' },
+                  { value: 'price_low_to_high', label: 'Prix croissant' },
+                  { value: 'price_high_to_low', label: 'Prix décroissant' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setForm({ ...form, sort_by: opt.value })}
+                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition-colors active:opacity-70"
+                    style={{
+                      backgroundColor: form.sort_by === opt.value ? 'rgba(108, 92, 231, 0.15)' : 'var(--secondary-bg-color)',
+                      color: form.sort_by === opt.value ? 'var(--button-color)' : 'var(--text-color)',
+                      border: `1px solid ${form.sort_by === opt.value ? 'rgba(108,92,231,0.3)' : 'transparent'}`,
+                    }}
+                  >
+                    <span>{opt.label}</span>
+                    {form.sort_by === opt.value && <Check size={14} style={{ color: 'var(--button-color)' }} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Section>
+      </div>
     </div>
   );
 }
