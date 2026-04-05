@@ -1,24 +1,25 @@
 @import "tailwindcss";
 
+/* Force dark theme — ignore Telegram's light theme */
 :root {
-  --bg-color: var(--tg-theme-bg-color, #1a1a2e);
-  --text-color: var(--tg-theme-text-color, #eaeaea);
-  --hint-color: var(--tg-theme-hint-color, #7a7a8e);
-  --link-color: var(--tg-theme-link-color, #6c5ce7);
-  --button-color: var(--tg-theme-button-color, #6c5ce7);
-  --button-text-color: var(--tg-theme-button-text-color, #ffffff);
-  --secondary-bg-color: var(--tg-theme-secondary-bg-color, #16213e);
-  --header-bg-color: var(--tg-theme-header-bg-color, #0f3460);
-  --accent-text-color: var(--tg-theme-accent-text-color, #a29bfe);
-  --section-bg-color: var(--tg-theme-section-bg-color, #16213e);
-  --section-header-text-color: var(--tg-theme-section-header-text-color, #7a7a8e);
-  --subtitle-text-color: var(--tg-theme-subtitle-text-color, #7a7a8e);
-  --destructive-text-color: var(--tg-theme-destructive-text-color, #e74c3c);
-  --card-border: rgba(108, 92, 231, 0.15);
+  --bg-color: #0d0d1a;
+  --text-color: #f0f0f0;
+  --hint-color: #6b6b82;
+  --link-color: #7c6fe0;
+  --button-color: #6c5ce7;
+  --button-text-color: #ffffff;
+  --secondary-bg-color: #16162a;
+  --header-bg-color: #12123a;
+  --accent-text-color: #a29bfe;
+  --section-bg-color: #1a1a2e;
+  --section-header-text-color: #5a5a72;
+  --subtitle-text-color: #6b6b82;
+  --destructive-text-color: #e55757;
+  --card-border: rgba(108, 92, 231, 0.18);
   --success-color: #00b894;
   --warning-color: #fdcb6e;
   --pepite-color: #ffd32a;
-  --pepite-bg: rgba(255, 211, 42, 0.1);
+  --pepite-bg: rgba(255, 211, 42, 0.12);
 }
 
 * {
@@ -48,6 +49,7 @@ body {
   max-width: 100vw;
   overflow-x: hidden;
   padding-bottom: env(safe-area-inset-bottom, 0);
+  background-color: var(--bg-color);
 }
 
 /* Hide scrollbar but keep scroll */
@@ -86,9 +88,9 @@ input[type="range"] {
 .border-tg { border-color: var(--card-border); }
 
 /* Glow effects */
-.glow-purple { box-shadow: 0 0 20px rgba(108, 92, 231, 0.2); }
-.glow-green { box-shadow: 0 0 20px rgba(0, 184, 148, 0.2); }
-.glow-pepite { box-shadow: 0 0 20px rgba(255, 211, 42, 0.2); }
+.glow-purple { box-shadow: 0 0 24px rgba(108, 92, 231, 0.25); }
+.glow-green { box-shadow: 0 0 24px rgba(0, 184, 148, 0.25); }
+.glow-pepite { box-shadow: 0 0 24px rgba(255, 211, 42, 0.25); }
 
 /* Card interactive state */
 .card-press { transition: transform 0.1s ease, opacity 0.1s ease; }
