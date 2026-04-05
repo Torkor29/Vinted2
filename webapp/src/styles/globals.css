@@ -1,101 +1,87 @@
 @import "tailwindcss";
 
 :root {
-  --bg-color: var(--tg-theme-bg-color, #ffffff);
-  --text-color: var(--tg-theme-text-color, #000000);
-  --hint-color: var(--tg-theme-hint-color, #999999);
-  --link-color: var(--tg-theme-link-color, #2481cc);
-  --button-color: var(--tg-theme-button-color, #2481cc);
+  --bg-color: var(--tg-theme-bg-color, #1a1a2e);
+  --text-color: var(--tg-theme-text-color, #eaeaea);
+  --hint-color: var(--tg-theme-hint-color, #7a7a8e);
+  --link-color: var(--tg-theme-link-color, #6c5ce7);
+  --button-color: var(--tg-theme-button-color, #6c5ce7);
   --button-text-color: var(--tg-theme-button-text-color, #ffffff);
-  --secondary-bg-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
-  --header-bg-color: var(--tg-theme-header-bg-color, #ffffff);
-  --accent-text-color: var(--tg-theme-accent-text-color, #2481cc);
-  --section-bg-color: var(--tg-theme-section-bg-color, #ffffff);
-  --section-header-text-color: var(--tg-theme-section-header-text-color, #6d6d72);
-  --subtitle-text-color: var(--tg-theme-subtitle-text-color, #999999);
-  --destructive-text-color: var(--tg-theme-destructive-text-color, #ff3b30);
+  --secondary-bg-color: var(--tg-theme-secondary-bg-color, #16213e);
+  --header-bg-color: var(--tg-theme-header-bg-color, #0f3460);
+  --accent-text-color: var(--tg-theme-accent-text-color, #a29bfe);
+  --section-bg-color: var(--tg-theme-section-bg-color, #16213e);
+  --section-header-text-color: var(--tg-theme-section-header-text-color, #7a7a8e);
+  --subtitle-text-color: var(--tg-theme-subtitle-text-color, #7a7a8e);
+  --destructive-text-color: var(--tg-theme-destructive-text-color, #e74c3c);
+  --card-border: rgba(108, 92, 231, 0.15);
+  --success-color: #00b894;
+  --warning-color: #fdcb6e;
+  --pepite-color: #ffd32a;
+  --pepite-bg: rgba(255, 211, 42, 0.1);
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-color);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  max-width: 100vw;
+  line-height: 1.4;
 }
 
 .app {
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 4px;
+/* Hide scrollbar but keep scroll */
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Inputs mobile-friendly */
+input, select, textarea {
+  font-size: 16px !important; /* prevents iOS zoom on focus */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+input[type="range"] {
+  -webkit-appearance: auto;
+  appearance: auto;
+  accent-color: var(--button-color);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--hint-color);
-  border-radius: 2px;
-}
+/* Telegram theme utility classes */
+.bg-tg { background-color: var(--bg-color); }
+.bg-tg-secondary { background-color: var(--secondary-bg-color); }
+.bg-tg-section { background-color: var(--section-bg-color); }
+.bg-tg-button { background-color: var(--button-color); }
+.text-tg { color: var(--text-color); }
+.text-tg-hint { color: var(--hint-color); }
+.text-tg-link { color: var(--link-color); }
+.text-tg-button { color: var(--button-text-color); }
+.text-tg-accent { color: var(--accent-text-color); }
+.text-tg-subtitle { color: var(--subtitle-text-color); }
+.text-tg-section-header { color: var(--section-header-text-color); }
+.text-tg-destructive { color: var(--destructive-text-color); }
+.border-tg { border-color: var(--card-border); }
 
-/* Utility classes for Telegram theme */
-.bg-tg {
-  background-color: var(--bg-color);
-}
-
-.bg-tg-secondary {
-  background-color: var(--secondary-bg-color);
-}
-
-.bg-tg-section {
-  background-color: var(--section-bg-color);
-}
-
-.bg-tg-button {
-  background-color: var(--button-color);
-}
-
-.text-tg {
-  color: var(--text-color);
-}
-
-.text-tg-hint {
-  color: var(--hint-color);
-}
-
-.text-tg-link {
-  color: var(--link-color);
-}
-
-.text-tg-button {
-  color: var(--button-text-color);
-}
-
-.text-tg-accent {
-  color: var(--accent-text-color);
-}
-
-.text-tg-subtitle {
-  color: var(--subtitle-text-color);
-}
-
-.text-tg-section-header {
-  color: var(--section-header-text-color);
-}
-
-.text-tg-destructive {
-  color: var(--destructive-text-color);
-}
+/* Glow effects */
+.glow-purple { box-shadow: 0 0 20px rgba(108, 92, 231, 0.2); }
+.glow-green { box-shadow: 0 0 20px rgba(0, 184, 148, 0.2); }
+.glow-pepite { box-shadow: 0 0 20px rgba(255, 211, 42, 0.2); }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCreatePurchase, useUpdatePurchase } from '../hooks/usePurchases.js';
 import { useBackButton, useMainButton } from '../hooks/useTelegram.js';
@@ -30,181 +30,87 @@ export default function PurchaseEdit() {
   useBackButton(handleBack);
 
   const handleSave = useCallback(async () => {
-    if (!form.title.trim() || !form.purchase_price) {
-      hapticNotification('error');
-      return;
-    }
-
+    if (!form.title.trim() || !form.purchase_price) { hapticNotification('error'); return; }
     try {
       if (isEditing && id) {
         await updatePurchase.mutateAsync({
-          id,
-          is_sold: form.status === 'sold',
+          id, is_sold: form.status === 'sold',
           sold_price: form.sold_price ? parseFloat(form.sold_price) : null,
           sold_platform_fee: form.sold_platform_fee ? parseFloat(form.sold_platform_fee) : null,
           sold_date: form.status === 'sold' ? new Date().toISOString() : null,
-          status: form.status,
-          notes: form.notes || null,
+          status: form.status, notes: form.notes || null,
         });
       } else {
         const articleId = searchParams.get('articleId');
         await createPurchase.mutateAsync({
           article_id: articleId ? parseInt(articleId) : null,
-          title: form.title,
-          brand_name: form.brand_name || null,
-          vinted_url: form.vinted_url || null,
-          photo_url: form.photo_url || null,
+          title: form.title, brand_name: form.brand_name || null,
+          vinted_url: form.vinted_url || null, photo_url: form.photo_url || null,
           purchase_price: parseFloat(form.purchase_price),
           shipping_cost: parseFloat(form.shipping_cost) || 0,
-          status: form.status,
-          notes: form.notes || null,
+          status: form.status, notes: form.notes || null,
         });
       }
       hapticNotification('success');
       navigate('/purchases');
-    } catch {
-      hapticNotification('error');
-    }
+    } catch { hapticNotification('error'); }
   }, [form, isEditing, id, createPurchase, updatePurchase, navigate, searchParams]);
 
-  useMainButton(
-    isEditing ? 'Enregistrer' : 'Ajouter l\'achat',
-    handleSave,
-    form.title.trim().length > 0 && !!form.purchase_price,
+  useMainButton(isEditing ? 'Enregistrer' : 'Ajouter', handleSave, form.title.trim().length > 0 && !!form.purchase_price);
+
+  const Input = ({ label, value, onChange, placeholder, type = 'text', suffix }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; suffix?: string }) => (
+    <div>
+      <label className="text-[10px] text-tg-hint block mb-1">{label}</label>
+      <div className="relative">
+        <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+          className="w-full bg-tg-secondary rounded-lg px-3 py-2 text-sm text-tg outline-none border border-transparent focus:border-[var(--button-color)]" />
+        {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-tg-hint">{suffix}</span>}
+      </div>
+    </div>
   );
 
   return (
-    <div className="p-4 pb-24 space-y-4">
-      <h1 className="text-xl font-bold text-tg mb-4">
-        {isEditing ? 'Modifier l\'achat' : 'Nouvel achat'}
-      </h1>
+    <div className="px-4 pt-4 pb-24 max-w-full overflow-hidden space-y-3">
+      <h1 className="text-lg font-bold text-tg mb-3">{isEditing ? 'Modifier' : 'Nouvel achat'}</h1>
 
-      <div className="bg-tg-section rounded-xl p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-tg-section-header">Informations</h2>
-
-        <div>
-          <label className="text-xs text-tg-hint block mb-1">Titre *</label>
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="Nom de l'article"
-            className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-tg-hint block mb-1">Marque</label>
-          <input
-            type="text"
-            value={form.brand_name}
-            onChange={(e) => setForm({ ...form, brand_name: e.target.value })}
-            placeholder="Ex: Nike"
-            className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-tg-hint block mb-1">Lien Vinted</label>
-          <input
-            type="url"
-            value={form.vinted_url}
-            onChange={(e) => setForm({ ...form, vinted_url: e.target.value })}
-            placeholder="https://www.vinted.fr/..."
-            className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-          />
-        </div>
+      <div className="bg-tg-section rounded-xl border border-[var(--card-border)] p-3 space-y-3">
+        <div className="text-[10px] font-semibold text-tg-section-header uppercase">Article</div>
+        <Input label="Titre *" value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder="Nom de l'article" />
+        <Input label="Marque" value={form.brand_name} onChange={(v) => setForm({ ...form, brand_name: v })} placeholder="Nike" />
+        <Input label="Lien Vinted" value={form.vinted_url} onChange={(v) => setForm({ ...form, vinted_url: v })} placeholder="https://vinted.fr/..." type="url" />
       </div>
 
-      <div className="bg-tg-section rounded-xl p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-tg-section-header">Achat</h2>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-tg-hint block mb-1">Prix d'achat * (EUR)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.purchase_price}
-              onChange={(e) => setForm({ ...form, purchase_price: e.target.value })}
-              placeholder="0.00"
-              className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-tg-hint block mb-1">Frais de port (EUR)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.shipping_cost}
-              onChange={(e) => setForm({ ...form, shipping_cost: e.target.value })}
-              placeholder="0.00"
-              className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-            />
-          </div>
+      <div className="bg-tg-section rounded-xl border border-[var(--card-border)] p-3 space-y-3">
+        <div className="text-[10px] font-semibold text-tg-section-header uppercase">Achat</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Input label="Prix d'achat *" value={form.purchase_price} onChange={(v) => setForm({ ...form, purchase_price: v })} placeholder="0.00" type="number" suffix="EUR" />
+          <Input label="Frais port" value={form.shipping_cost} onChange={(v) => setForm({ ...form, shipping_cost: v })} placeholder="0.00" type="number" suffix="EUR" />
         </div>
       </div>
 
       {isEditing && (
-        <div className="bg-tg-section rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-tg-section-header">Revente</h2>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-tg-hint block mb-1">Prix de vente (EUR)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.sold_price}
-                onChange={(e) => setForm({ ...form, sold_price: e.target.value })}
-                placeholder="0.00"
-                className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-tg-hint block mb-1">Commission (EUR)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.sold_platform_fee}
-                onChange={(e) => setForm({ ...form, sold_platform_fee: e.target.value })}
-                placeholder="0.00"
-                className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none focus:ring-2 focus:ring-tg-button/30"
-              />
-            </div>
+        <div className="bg-tg-section rounded-xl border border-[var(--card-border)] p-3 space-y-3">
+          <div className="text-[10px] font-semibold text-tg-section-header uppercase">Revente</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input label="Prix vente" value={form.sold_price} onChange={(v) => setForm({ ...form, sold_price: v })} placeholder="0.00" type="number" suffix="EUR" />
+            <Input label="Commission" value={form.sold_platform_fee} onChange={(v) => setForm({ ...form, sold_platform_fee: v })} placeholder="0.00" type="number" suffix="EUR" />
           </div>
         </div>
       )}
 
-      <div className="bg-tg-section rounded-xl p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-tg-section-header">Statut</h2>
-
+      <div className="bg-tg-section rounded-xl border border-[var(--card-border)] p-3 space-y-3">
+        <div className="text-[10px] font-semibold text-tg-section-header uppercase">Statut</div>
+        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
+          className="w-full bg-tg-secondary rounded-lg px-3 py-2 text-sm text-tg outline-none border border-transparent">
+          <option value="purchased">En stock</option>
+          <option value="listed">En vente</option>
+          <option value="sold">Vendu</option>
+          <option value="returned">Retourne</option>
+        </select>
         <div>
-          <select
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
-            className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none"
-          >
-            <option value="purchased">En stock</option>
-            <option value="listed">En vente</option>
-            <option value="sold">Vendu</option>
-            <option value="returned">Retourne</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs text-tg-hint block mb-1">Notes</label>
-          <textarea
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Notes personnelles..."
-            rows={3}
-            className="w-full bg-tg-secondary rounded-lg px-3 py-2.5 text-sm text-tg outline-none resize-none focus:ring-2 focus:ring-tg-button/30"
-          />
+          <label className="text-[10px] text-tg-hint block mb-1">Notes</label>
+          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notes..."
+            rows={2} className="w-full bg-tg-secondary rounded-lg px-3 py-2 text-sm text-tg outline-none resize-none border border-transparent focus:border-[var(--button-color)]" />
         </div>
       </div>
     </div>
