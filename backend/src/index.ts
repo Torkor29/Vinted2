@@ -12,12 +12,7 @@ import { startScanWorker, stopScanWorker } from './workers/scan-worker.js';
 import { startPriceWorker, stopPriceWorker } from './workers/price-worker.js';
 import { startCleanupWorker, stopCleanupWorker } from './workers/cleanup-worker.js';
 
-const logger = pino({
-  level: config.LOG_LEVEL,
-  transport: config.NODE_ENV === 'development'
-    ? { target: 'pino-pretty', options: { colorize: true } }
-    : undefined,
-});
+const logger = pino({ level: config.LOG_LEVEL });
 
 async function main() {
   logger.info('Starting Vinted Bot...');
@@ -33,8 +28,12 @@ async function main() {
   await runMigrations();
   logger.info('Database migrations applied');
 
-  // Create Fastify server
-  const app = Fastify({ logger });
+  // Create Fastify server — Fastify v5 needs a config object, not a pino instance
+  const app = Fastify({
+    logger: {
+      level: config.LOG_LEVEL,
+    },
+  });
 
   await app.register(cors, {
     origin: true,
