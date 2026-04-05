@@ -1,7 +1,5 @@
-import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useBackButton } from '../hooks/useTelegram.js';
 import { formatPriceCompact } from '../utils/formatters.js';
 import api from '../api/client.js';
 
@@ -22,10 +20,7 @@ const PERIODS = [
 ];
 
 export default function Analytics() {
-  const navigate = useNavigate();
   const [period, setPeriod] = useState('30d');
-  const handleBack = useCallback(() => navigate('/'), [navigate]);
-  useBackButton(handleBack);
 
   const { data: overview } = useQuery<OverviewData>({ queryKey: ['analytics', 'overview'], queryFn: async () => (await api.get('/analytics/overview')).data.data });
   const { data: timeline } = useQuery<ProfitTimeline[]>({ queryKey: ['analytics', 'timeline', period], queryFn: async () => (await api.get(`/analytics/profit-timeline?period=${period}`)).data.data });

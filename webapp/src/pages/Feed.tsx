@@ -1,8 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useArticles } from '../hooks/useArticles.js';
 import { useFilters } from '../hooks/useFilters.js';
-import { useBackButton } from '../hooks/useTelegram.js';
 import ArticleCard from '../components/ArticleCard.js';
 import type { Article } from '../hooks/useArticles.js';
 
@@ -14,9 +13,6 @@ export default function Feed() {
   const [selectedFilter, setSelectedFilter] = useState<string | undefined>();
   const { data: filters } = useFilters();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useArticles(selectedFilter, pepitesOnly);
-
-  const handleBack = useCallback(() => navigate('/'), [navigate]);
-  useBackButton(handleBack);
 
   const articles = data?.pages.flatMap(p => p.data) ?? [];
 

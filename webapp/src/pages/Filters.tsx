@@ -1,17 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useFilters, useToggleFilter, useDeleteFilter } from '../hooks/useFilters.js';
-import { useBackButton } from '../hooks/useTelegram.js';
 import { hapticFeedback, hapticNotification } from '../utils/telegram.js';
-import { useCallback } from 'react';
 
 export default function Filters() {
   const navigate = useNavigate();
   const { data: filters, isLoading } = useFilters();
   const toggleFilter = useToggleFilter();
   const deleteFilter = useDeleteFilter();
-
-  const handleBack = useCallback(() => navigate('/'), [navigate]);
-  useBackButton(handleBack);
 
   const handleToggle = (id: string) => {
     hapticFeedback('medium');

@@ -1,7 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePurchases, usePurchaseStats, useDeletePurchase } from '../hooks/usePurchases.js';
-import { useBackButton } from '../hooks/useTelegram.js';
 import { formatPriceCompact } from '../utils/formatters.js';
 import ProfitIndicator from '../components/ProfitIndicator.js';
 import { hapticFeedback, hapticNotification } from '../utils/telegram.js';
@@ -19,9 +18,6 @@ export default function Purchases() {
   const { data: purchases, isLoading } = usePurchases(activeTab);
   const { data: stats } = usePurchaseStats();
   const deletePurchase = useDeletePurchase();
-
-  const handleBack = useCallback(() => navigate('/'), [navigate]);
-  useBackButton(handleBack);
 
   const statusColors: Record<string, string> = {
     purchased: 'bg-blue-500/20 text-blue-400',

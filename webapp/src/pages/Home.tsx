@@ -21,55 +21,69 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen pb-20">
       {/* Header */}
-      <div className="px-4 pt-4 pb-3">
-        <h1 className="text-xl font-bold text-tg">Vinted Bot</h1>
-        <p className="text-xs text-tg-hint mt-0.5">Surveillance en temps reel</p>
+      <div className="px-4 pt-5 pb-4" style={{ background: 'linear-gradient(135deg, var(--header-bg-color) 0%, var(--bg-color) 100%)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-tg">Vinted Bot</h1>
+            <p className="text-xs text-tg-hint mt-0.5">Surveillance en temps réel</p>
+          </div>
+          <button
+            onClick={() => goTo('/settings')}
+            className="w-9 h-9 bg-tg-section rounded-xl flex items-center justify-center text-base border border-[var(--card-border)] active:scale-90 transition-transform"
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
 
       {/* Stats row */}
       <div className="px-4 grid grid-cols-4 gap-2 mb-4">
         {[
-          { value: `${activeFilters}`, label: 'Filtres', emoji: '🔍' },
-          { value: `${recentArticles?.length ?? 0}`, label: 'Articles', emoji: '📦' },
-          { value: `${pepitesCount}`, label: 'Pepites', emoji: '💎' },
-          { value: stats ? `${stats.totalProfit >= 0 ? '+' : ''}${stats.totalProfit.toFixed(0)}` : '0', label: 'Profit', emoji: '💰' },
+          { value: `${activeFilters}`, label: 'Filtres', emoji: '🔍', path: '/filters' },
+          { value: `${recentArticles?.length ?? 0}`, label: 'Articles', emoji: '📦', path: '/feed' },
+          { value: `${pepitesCount}`, label: 'Pépites', emoji: '💎', path: '/feed?pepites=true' },
+          { value: stats ? `${stats.totalProfit >= 0 ? '+' : ''}${stats.totalProfit.toFixed(0)}€` : '0€', label: 'Profit', emoji: '💰', path: '/analytics' },
         ].map(s => (
-          <div key={s.label} className="bg-tg-section rounded-xl p-2.5 text-center border border-[var(--card-border)]">
-            <div className="text-base">{s.emoji}</div>
-            <div className="text-sm font-bold text-tg mt-0.5">{s.value}</div>
-            <div className="text-[10px] text-tg-hint">{s.label}</div>
-          </div>
+          <button
+            key={s.label}
+            onClick={() => goTo(s.path)}
+            className="bg-tg-section rounded-xl p-2.5 text-center border border-[var(--card-border)] active:scale-[0.95] transition-transform"
+          >
+            <div className="text-base leading-none">{s.emoji}</div>
+            <div className="text-sm font-bold text-tg mt-1 leading-none">{s.value}</div>
+            <div className="text-[9px] text-tg-hint mt-0.5 leading-none">{s.label}</div>
+          </button>
         ))}
       </div>
 
       {/* Quick actions */}
       <div className="px-4 grid grid-cols-2 gap-2 mb-4">
         {[
-          { label: 'Mes Filtres', sub: `${filters?.length ?? 0} configures`, icon: '🔍', path: '/filters', glow: 'glow-purple' },
-          { label: 'Feed Live', sub: 'Articles detectes', icon: '📦', path: '/feed', glow: '' },
-          { label: 'Achats', sub: 'Suivi financier', icon: '🛒', path: '/purchases', glow: '' },
-          { label: 'Analytics', sub: 'Statistiques', icon: '📊', path: '/analytics', glow: '' },
+          { label: 'Mes Filtres', sub: `${filters?.length ?? 0} configurés`, icon: '🔍', path: '/filters', glow: 'glow-purple', accent: true },
+          { label: 'Feed Live', sub: 'Articles détectés', icon: '📦', path: '/feed', glow: '', accent: false },
+          { label: 'Achats', sub: 'Suivi financier', icon: '🛒', path: '/purchases', glow: '', accent: false },
+          { label: 'Analytics', sub: 'Statistiques', icon: '📊', path: '/analytics', glow: '', accent: false },
         ].map(item => (
           <button
             key={item.path}
             onClick={() => goTo(item.path)}
-            className={`bg-tg-section rounded-xl p-3 text-left border border-[var(--card-border)] active:scale-[0.97] transition-transform ${item.glow}`}
+            className={`bg-tg-section rounded-xl p-3.5 text-left border border-[var(--card-border)] active:scale-[0.97] transition-transform ${item.glow}`}
           >
-            <span className="text-xl">{item.icon}</span>
-            <div className="text-sm font-semibold text-tg mt-1.5">{item.label}</div>
-            <div className="text-[10px] text-tg-hint">{item.sub}</div>
+            <span className="text-2xl leading-none">{item.icon}</span>
+            <div className="text-sm font-semibold text-tg mt-2">{item.label}</div>
+            <div className="text-[10px] text-tg-hint mt-0.5">{item.sub}</div>
           </button>
         ))}
       </div>
 
       {/* Recent articles */}
       {recentArticles && recentArticles.length > 0 && (
-        <div className="px-4 flex-1 mb-20">
+        <div className="px-4 flex-1">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-tg-section-header uppercase">Derniers articles</span>
-            <button onClick={() => goTo('/feed')} className="text-xs text-tg-link">Voir tout</button>
+            <span className="text-xs font-semibold text-tg-section-header uppercase tracking-wide">Derniers articles</span>
+            <button onClick={() => goTo('/feed')} className="text-xs text-tg-link">Voir tout →</button>
           </div>
           <div className="space-y-2">
             {recentArticles.slice(0, 3).map(article => (
@@ -78,28 +92,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-tg-section border-t border-[var(--card-border)] px-2 py-1.5 z-50" style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}>
-        <div className="flex justify-around max-w-md mx-auto">
-          {[
-            { label: 'Home', icon: '🏠', path: '/' },
-            { label: 'Filtres', icon: '🔍', path: '/filters' },
-            { label: 'Feed', icon: '📦', path: '/feed' },
-            { label: 'Achats', icon: '💰', path: '/purchases' },
-            { label: 'Stats', icon: '📊', path: '/analytics' },
-          ].map(item => (
-            <button
-              key={item.path}
-              onClick={() => goTo(item.path)}
-              className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg active:bg-tg-secondary transition-colors"
-            >
-              <span className="text-base">{item.icon}</span>
-              <span className="text-[9px] text-tg-hint">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
     </div>
   );
 }
