@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { getInitData } from '../utils/telegram.js';
 
-// En production sur Render, la webapp (static site) et le backend (web service)
-// sont sur des domaines differents. VITE_API_URL doit pointer vers le backend.
 const baseURL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : '/api';
@@ -10,13 +8,16 @@ const baseURL = import.meta.env.VITE_API_URL
 const api = axios.create({
   baseURL,
   timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
 
-// Add Telegram initData auth to every request
+// Auth: prefer PWA session token, fallback to Telegram initData
 api.interceptors.request.use((config) => {
+  const sessionToken = localStorage.getItem('session_token');
+  if (sessionToken) {
+    config.headers.Authorization = `Bearer ${sessionToken}`;
+    return config;
+  }
   const initData = getInitData();
   if (initData) {
     config.headers.Authorization = `tma ${initData}`;
@@ -24,12 +25,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.error('Auth error - initData may be expired');
+      // Session expired — clear and redirect to login hint
+      localStorage.removeItem('session_token');
+      localStorage.removeItem('session_expires');
     }
     return Promise.reject(error);
   },

@@ -1,4 +1,5 @@
 import type { Bot } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import type { BotContext, NotificationPayload } from '../../types/bot.js';
 import { formatArticleNotification, formatPepiteNotification } from './templates.js';
 import { getTopicIds } from './topic-router.js';
@@ -70,6 +71,7 @@ export function setupNotificationSender(bot: Bot<BotContext>): {
 
     const topicIds = getTopicIds();
     const text = formatArticleNotification(payload);
+    const keyboard = new InlineKeyboard().url('👟 Voir sur Vinted', payload.vintedUrl);
 
     await sendWithRateLimit(async () => {
       if (payload.photoUrl) {
@@ -77,12 +79,14 @@ export function setupNotificationSender(bot: Bot<BotContext>): {
           caption: text,
           parse_mode: 'HTML',
           message_thread_id: topicIds.feed ?? undefined,
+          reply_markup: keyboard,
         });
       } else {
         await bot.api.sendMessage(groupId, text, {
           parse_mode: 'HTML',
           message_thread_id: topicIds.feed ?? undefined,
           link_preview_options: { is_disabled: true },
+          reply_markup: keyboard,
         });
       }
 
@@ -95,6 +99,7 @@ export function setupNotificationSender(bot: Bot<BotContext>): {
 
     const topicIds = getTopicIds();
     const text = formatPepiteNotification(payload);
+    const keyboard = new InlineKeyboard().url('👟 Voir sur Vinted', payload.vintedUrl);
 
     await sendWithRateLimit(async () => {
       if (payload.photoUrl) {
@@ -102,12 +107,14 @@ export function setupNotificationSender(bot: Bot<BotContext>): {
           caption: text,
           parse_mode: 'HTML',
           message_thread_id: topicIds.pepites ?? undefined,
+          reply_markup: keyboard,
         });
       } else {
         await bot.api.sendMessage(groupId, text, {
           parse_mode: 'HTML',
           message_thread_id: topicIds.pepites ?? undefined,
           link_preview_options: { is_disabled: true },
+          reply_markup: keyboard,
         });
       }
 

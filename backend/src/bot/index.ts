@@ -10,6 +10,7 @@ import startCommand from './commands/start.js';
 import filtersCommand from './commands/filters.js';
 import statsCommand from './commands/stats.js';
 import helpCommand from './commands/help.js';
+import loginCommand from './commands/login.js';
 import callbackHandler from './handlers/callback.js';
 import webappDataHandler from './handlers/webapp-data.js';
 import pino from 'pino';
@@ -29,6 +30,7 @@ export function createBot(): Bot<BotContext> {
   bot.use(filtersCommand);
   bot.use(statsCommand);
   bot.use(helpCommand);
+  bot.use(loginCommand);
 
   // Register handlers
   bot.use(callbackHandler);
@@ -72,6 +74,7 @@ export async function startBot(bot: Bot<BotContext>): Promise<void> {
     { command: 'purchases', description: 'Achats/Reventes' },
     { command: 'settings', description: 'Parametres' },
     { command: 'help', description: 'Aide' },
+    { command: 'login', description: 'Ouvrir l\'application PWA' },
   ]);
 
   // Start polling

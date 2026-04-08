@@ -8,6 +8,7 @@ const configSchema = z.object({
 
   // URLs
   WEBAPP_URL: z.string().default('http://localhost:5173'),
+  APP_URL: z.string().default('http://localhost:5173'),
   API_URL: z.string().default('http://localhost:3000'),
   WEBHOOK_URL: z.string().default(''),
 

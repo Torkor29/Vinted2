@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { authRoutes } from './auth.routes.js';
 import { filtersRoutes } from './filters.routes.js';
 import { articlesRoutes } from './articles.routes.js';
 import { purchasesRoutes } from './purchases.routes.js';
@@ -7,6 +8,9 @@ import { catalogRoutes } from './catalog.routes.js';
 import { settingsRoutes } from './settings.routes.js';
 
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
+  // Auth routes — no middleware (public endpoints)
+  await app.register(authRoutes);
+
   await app.register(filtersRoutes);
   await app.register(articlesRoutes);
   await app.register(purchasesRoutes);

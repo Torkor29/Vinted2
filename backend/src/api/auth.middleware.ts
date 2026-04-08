@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config.js';
 import { findOrCreateUser } from '../services/user.service.js';
+import { getRedis } from '../db/redis.js';
 import type { DbUser } from '../types/database.js';
 
 declare module 'fastify' {
@@ -18,7 +19,31 @@ export async function telegramAuthMiddleware(
 ): Promise<void> {
   const authHeader = request.headers.authorization;
 
-  if (!authHeader?.startsWith('tma ')) {
+  if (!authHeader) {
+    reply.status(401).send({ success: false, error: 'Missing authorization' });
+    return;
+  }
+
+  // Bearer session token (PWA standalone mode)
+  if (authHeader.startsWith('Bearer ')) {
+    const sessionToken = authHeader.slice(7);
+    try {
+      const redis = getRedis();
+      const telegramUserId = await redis.get(`session:${sessionToken}`);
+      if (!telegramUserId) {
+        reply.status(401).send({ success: false, error: 'Invalid or expired session' });
+        return;
+      }
+      const user = await findOrCreateUser({ id: telegramUserId });
+      request.telegramUser = user;
+    } catch (err) {
+      reply.status(500).send({ success: false, error: 'Failed to authenticate user' });
+    }
+    return;
+  }
+
+  // Telegram Mini App initData
+  if (!authHeader.startsWith('tma ')) {
     reply.status(401).send({ success: false, error: 'Missing authorization' });
     return;
   }

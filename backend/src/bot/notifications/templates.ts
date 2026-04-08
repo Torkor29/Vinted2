@@ -23,7 +23,7 @@ export function formatArticleNotification(payload: NotificationPayload): string 
 export function formatPepiteNotification(payload: NotificationPayload): string {
   const lines: string[] = [];
 
-  lines.push('💎 <b>PEPITE DETECTEE !</b>');
+  lines.push('💎 <b>PÉPITE DÉTECTÉE !</b>');
   lines.push('');
 
   const brand = payload.brandName ? ` — ${escapeHtml(payload.brandName)}` : '';
@@ -38,7 +38,7 @@ export function formatPepiteNotification(payload: NotificationPayload): string {
   lines.push(priceText);
 
   if (payload.priceDifferencePct) {
-    lines.push(`📉 <b>${payload.priceDifferencePct}%</b> sous le marche !`);
+    lines.push(`📉 <b>${payload.priceDifferencePct}%</b> sous le marché !`);
   }
 
   if (payload.conditionName) {

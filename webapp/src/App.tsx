@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-ro
 import { Home, SlidersHorizontal, Package, ShoppingBag, BarChart3 } from 'lucide-react';
 import { useTelegram } from './hooks/useTelegram.js';
 import { hapticFeedback } from './utils/telegram.js';
+import Auth from './pages/Auth.js';
 import HomePage from './pages/Home.js';
 import Filters from './pages/Filters.js';
 import FilterEdit from './pages/FilterEdit.js';
@@ -89,6 +90,7 @@ function AppRoutes() {
         <Route path="/purchases/:id" element={<PurchaseEdit />} />
         <Route path="/analytics"     element={<Analytics />} />
         <Route path="/settings"      element={<Settings />} />
+        <Route path="/auth"          element={<Auth />} />
       </Routes>
       <BottomNav />
     </>
