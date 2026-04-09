@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { Home, SlidersHorizontal, Package, ShoppingBag, BarChart3 } from 'lucide-react';
-import { useTelegram } from './hooks/useTelegram.js';
 import { hapticFeedback } from './utils/telegram.js';
 import Auth from './pages/Auth.js';
 import HomePage from './pages/Home.js';
@@ -13,11 +12,11 @@ import Analytics from './pages/Analytics.js';
 import Settings from './pages/Settings.js';
 
 const NAV_ITEMS = [
-  { label: 'Home',     Icon: Home,             path: '/' },
-  { label: 'Filtres',  Icon: SlidersHorizontal, path: '/filters' },
-  { label: 'Feed',     Icon: Package,           path: '/feed' },
-  { label: 'Achats',   Icon: ShoppingBag,       path: '/purchases' },
-  { label: 'Stats',    Icon: BarChart3,         path: '/analytics' },
+  { label: 'Home',    Icon: Home,              path: '/' },
+  { label: 'Filtres', Icon: SlidersHorizontal, path: '/filters' },
+  { label: 'Feed',    Icon: Package,           path: '/feed' },
+  { label: 'Achats',  Icon: ShoppingBag,       path: '/purchases' },
+  { label: 'Stats',   Icon: BarChart3,         path: '/analytics' },
 ];
 
 const MAIN_PATHS = ['/', '/filters', '/feed', '/purchases', '/analytics'];
@@ -30,44 +29,71 @@ function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50"
       style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
         backgroundColor: 'var(--section-bg-color)',
         borderTop: '1px solid var(--card-border)',
-        paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
-        paddingTop: '0.5rem',
+        paddingBottom: 'max(6px, env(safe-area-inset-bottom))',
+        paddingTop: '6px',
       }}
     >
-      <div className="flex justify-around max-w-md mx-auto">
+      <div style={{ display: 'flex', justifyContent: 'space-around', maxWidth: 480, margin: '0 auto' }}>
         {NAV_ITEMS.map(({ label, Icon, path }) => {
           const isActive = pathname === path;
           return (
             <button
               key={path}
               onClick={() => { hapticFeedback('light'); navigate(path); }}
-              className="flex flex-col items-center gap-1 px-3 py-1 min-w-[48px] relative"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 3,
+                padding: '4px 10px 2px',
+                minWidth: 52,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                position: 'relative',
+              }}
             >
+              {isActive && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 20,
+                    height: 2,
+                    borderRadius: '0 0 2px 2px',
+                    backgroundColor: 'var(--button-color)',
+                  }}
+                />
+              )}
               <Icon
-                size={20}
-                strokeWidth={isActive ? 2.2 : 1.8}
-                style={{ color: isActive ? 'var(--button-color)' : 'var(--hint-color)' }}
+                size={22}
+                strokeWidth={isActive ? 2.2 : 1.6}
+                style={{
+                  color: isActive ? 'var(--button-color)' : 'var(--hint-color)',
+                  transition: 'color 0.15s',
+                }}
               />
               <span
                 style={{
-                  fontSize: '10px',
-                  fontWeight: isActive ? 600 : 400,
+                  fontSize: 10,
+                  fontWeight: isActive ? 700 : 400,
                   color: isActive ? 'var(--button-color)' : 'var(--hint-color)',
                   lineHeight: 1,
+                  transition: 'color 0.15s',
                 }}
               >
                 {label}
               </span>
-              {isActive && (
-                <span
-                  className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
-                  style={{ backgroundColor: 'var(--button-color)' }}
-                />
-              )}
             </button>
           );
         })}
@@ -98,10 +124,8 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const { colorScheme } = useTelegram();
-
   return (
-    <div className={`app ${colorScheme}`}>
+    <div className="app dark">
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>

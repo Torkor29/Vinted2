@@ -70,7 +70,7 @@ export function getInitData(): string {
 }
 
 export function getColorScheme(): 'light' | 'dark' {
-  return getTelegram()?.colorScheme ?? 'light';
+  return getTelegram()?.colorScheme ?? 'dark';
 }
 
 export function hapticFeedback(type: 'light' | 'medium' | 'heavy' = 'light'): void {
