@@ -23,6 +23,7 @@ services:
       - PEPITE_DEFAULT_THRESHOLD=${PEPITE_DEFAULT_THRESHOLD:-0.30}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - NODE_ENV=production
+      - APP_URL=${APP_URL:-https://vinted-bot-ecru.vercel.app}
     depends_on:
       db:
         condition: service_healthy
