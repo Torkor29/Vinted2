@@ -32,8 +32,10 @@ function BottomNav() {
       style={{
         position: 'fixed',
         bottom: 0,
-        left: 0,
-        right: 0,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100%',
+        maxWidth: 480,
         zIndex: 50,
         backgroundColor: 'var(--section-bg-color)',
         borderTop: '1px solid var(--card-border)',
