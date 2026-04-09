@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, ArrowLeft, Gem } from 'lucide-react';
-import { useFilter, useCreateFilter, useUpdateFilter } from '../hooks/useFilters.js';
+import { ChevronRight, ArrowLeft, Gem, Trash2 } from 'lucide-react';
+import { useFilter, useCreateFilter, useUpdateFilter, useDeleteFilter } from '../hooks/useFilters.js';
 import { hapticNotification, hapticFeedback } from '../utils/telegram.js';
 import CategoryPicker from '../components/CategoryPicker.js';
 import BrandSearch from '../components/BrandSearch.js';
@@ -42,6 +42,7 @@ export default function FilterEdit() {
   const { data: existingFilter } = useFilter(id);
   const createFilter = useCreateFilter();
   const updateFilter = useUpdateFilter();
+  const deleteFilter = useDeleteFilter();
   const [form, setForm] = useState<FormState>(defaultForm);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -118,9 +119,11 @@ export default function FilterEdit() {
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-color)' }}>{title}</span>
             {badge}
           </div>
-          {open
-            ? <ChevronDown size={16} style={{ color: 'var(--hint-color)' }} />
-            : <ChevronRight size={16} style={{ color: 'var(--hint-color)' }} />}
+          <ChevronRight size={16} style={{
+            color: 'var(--hint-color)',
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.18s ease',
+          }} />
         </button>
         {open && (
           <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--card-border)' }}>
@@ -140,6 +143,19 @@ export default function FilterEdit() {
   const labelStyle: React.CSSProperties = {
     fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const,
     letterSpacing: 0.6, color: 'var(--hint-color)', marginBottom: 7, display: 'block',
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (!window.confirm('Supprimer ce filtre ?')) return;
+    hapticFeedback('medium');
+    try {
+      await deleteFilter.mutateAsync(id);
+      hapticNotification('success');
+      navigate('/filters');
+    } catch {
+      hapticNotification('error');
+    }
   };
 
   const canSave = form.name.trim().length > 0;
@@ -166,7 +182,7 @@ export default function FilterEdit() {
         >
           <ArrowLeft size={17} style={{ color: 'var(--hint-color)' }} />
         </button>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-color)', lineHeight: 1.2 }}>
             {isEditing ? 'Modifier le filtre' : 'Nouveau filtre'}
           </h1>
@@ -174,6 +190,20 @@ export default function FilterEdit() {
             {isEditing ? 'Modifie les critères' : 'Configure la surveillance'}
           </p>
         </div>
+        {isEditing && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            style={{
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)',
+              cursor: 'pointer',
+            }}
+          >
+            <Trash2 size={15} style={{ color: 'var(--destructive-text-color)' }} />
+          </button>
+        )}
       </div>
 
       <div style={{ padding: '14px 16px' }}>
