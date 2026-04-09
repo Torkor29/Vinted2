@@ -43,12 +43,13 @@ export default function Auth() {
         }
       })
       .catch((err) => {
-        const is401 = err?.response?.status === 401;
+        const status = err?.response?.status;
+        const is401 = status === 401;
         setStatus('error');
         setErrorMsg(
           is401
             ? 'Lien expiré ou déjà utilisé.\nTape /login dans le bot pour en obtenir un nouveau (valide 10 min).'
-            : 'Impossible de joindre le serveur.\nVérifie ta connexion puis retente /login dans le bot.',
+            : `Erreur ${status ?? 'réseau'} — ${err?.response?.data?.error ?? err?.message ?? 'inconnu'}`,
         );
       });
   }, []);
