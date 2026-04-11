@@ -16,6 +16,16 @@ for (const [genderId, cats] of Object.entries(CATEGORIES)) {
   GENDER_CATALOG_IDS[genderId] = ids;
 }
 
+// ── Freshness: only process items published within this window ──
+// 30 minutes — anything older is almost certainly already gone on competitive items
+const FRESHNESS_WINDOW_MS = 30 * 60_000;
+
+// ── Dedup: seen items are kept for 2 hours to avoid re-processing ──
+const SEEN_TTL_MS = 2 * 60 * 60_000;
+
+// ── Memory safety: hard cap on seen items map ──
+const SEEN_MAX_SIZE = 50_000;
+
 // Country code to flag emoji mapping
 const COUNTRY_FLAGS = {
   fr: '\u{1F1EB}\u{1F1F7}', de: '\u{1F1E9}\u{1F1EA}', es: '\u{1F1EA}\u{1F1F8}',
@@ -99,9 +109,14 @@ export class VintedSearch {
   /**
    * Poll for new items matching a query.
    * Returns only items not seen before (deduplication).
+   *
+   * OPTIMIZED: per_page=24 (we only care about the newest listings,
+   * not deep pages), plus a freshness filter that rejects items older
+   * than FRESHNESS_WINDOW_MS to avoid processing stale catalog entries.
    */
   async pollNewItems(country, query = {}) {
-    const searchQuery = { ...query, order: 'newest_first', page: 1 };
+    // Small page = less transfer, faster response — we only need the latest
+    const searchQuery = { ...query, order: 'newest_first', page: 1, perPage: 24 };
     const result = await this.search(country, searchQuery);
 
     if (result.error) return [];
@@ -117,10 +132,17 @@ export class VintedSearch {
       return [];
     }
 
-    // Only keep items we've never seen — that's the sniper logic
+    const now = Date.now();
     const newItems = result.items.filter(item => {
       if (this.seenItems.has(item.id)) return false;
-      this.seenItems.set(item.id, Date.now());
+
+      // ── Freshness gate: skip items older than window ──
+      if (FRESHNESS_WINDOW_MS > 0 && item.createdAt) {
+        const age = now - new Date(item.createdAt).getTime();
+        if (age > FRESHNESS_WINDOW_MS) return false;
+      }
+
+      this.seenItems.set(item.id, now);
       return true;
     });
 
@@ -303,10 +325,10 @@ export class VintedSearch {
   }
 
   /**
-   * Clean up old seen items (>12 hours old).
+   * Clean up old seen items (>SEEN_TTL_MS) and enforce hard cap.
    */
   cleanupSeen() {
-    const cutoff = Date.now() - 12 * 60 * 60_000;
+    const cutoff = Date.now() - SEEN_TTL_MS;
     let removed = 0;
     for (const [id, ts] of this.seenItems) {
       if (ts < cutoff) {
@@ -314,7 +336,18 @@ export class VintedSearch {
         removed++;
       }
     }
-    if (removed > 0) log.debug(`Cleaned up ${removed} old seen items`);
+
+    // Hard cap: if still over limit, evict oldest entries
+    if (this.seenItems.size > SEEN_MAX_SIZE) {
+      const entries = [...this.seenItems.entries()].sort((a, b) => a[1] - b[1]);
+      const toRemove = entries.slice(0, this.seenItems.size - SEEN_MAX_SIZE);
+      for (const [id] of toRemove) {
+        this.seenItems.delete(id);
+        removed++;
+      }
+    }
+
+    if (removed > 0) log.debug(`Cleaned up ${removed} old seen items (${this.seenItems.size} remaining)`);
   }
 
   destroy() {

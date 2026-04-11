@@ -313,6 +313,10 @@ class VintedSniper {
   /**
    * Process new items through the full pipeline.
    * Shared by both TurboPoller and standard mode.
+   *
+   * OPTIMIZED: hot path is score → autobuy → dashboard → notify (synchronous/instant).
+   * Everything else (visual matching, enrichment, export) is background.
+   *
    * @param {object[]} newItems - Normalized items
    * @param {string} country - Country code
    * @param {object} [query] - Source query (used for routing notifications to the right group)
@@ -323,32 +327,16 @@ class VintedSniper {
     }
     this.countryStats[country].lastPoll = new Date().toISOString();
 
-    // 1. Score + track
+    // ══ HOT PATH (blocking — must be fast) ══
+
+    // 1. Score + track (pure CPU, instant)
     for (const item of newItems) {
       this.totalNewItems++;
       this.countryStats[country].items++;
       this.dealScorer.scoreItem(item);
-      if (config.countries.length > 1) this.arbitrage.checkItem(item, country);
-      this.exporter.addItem(item);
     }
 
-    // 1b. Visual matching (non-blocking for speed)
-    if (this.imageSearch.references.size > 0) {
-      for (const item of newItems) {
-        const match = await this.imageSearch.compareItem(item).catch(() => null);
-        if (match?.matches) {
-          item.visualMatch = match.bestMatch;
-          item.visualSimilarity = match.bestMatch.similarity;
-        }
-      }
-    }
-
-    // 2. Dashboard push (instant)
-    if (config.dashboard.enabled) {
-      for (const item of newItems) this.dashboard.pushNewItem(item);
-    }
-
-    // 3. Autobuy FIRST (time-sensitive)
+    // 2. Autobuy FIRST (time-sensitive — the whole point of speed)
     const targetChatId = query?._chatId || null;
     if (config.autobuy.enabled) {
       for (const item of newItems) {
@@ -366,22 +354,44 @@ class VintedSniper {
       }
     }
 
-    // 4. Notifications — routed to the group that owns the query
-    const notifPromises = newItems.map(item => {
-      const promises = [];
+    // 3. Dashboard push (instant, in-process)
+    if (config.dashboard.enabled) {
+      for (const item of newItems) this.dashboard.pushNewItem(item);
+    }
+
+    // 4. Telegram/notifications — truly fire-and-forget, don't await
+    for (const item of newItems) {
       if (this.telegramBot) {
         if (item.dealScore >= 70) {
-          promises.push(this.telegramBot.notifyDeal(item, targetChatId).catch(() => {}));
+          this.telegramBot.notifyDeal(item, targetChatId).catch(() => {});
         } else {
-          promises.push(this.telegramBot.notifyNewItem(item, targetChatId).catch(() => {}));
+          this.telegramBot.notifyNewItem(item, targetChatId).catch(() => {});
         }
       }
-      promises.push(this.notifier.notifyNewItem(item).catch(() => {}));
-      return Promise.allSettled(promises);
-    });
-    Promise.allSettled(notifPromises).catch(() => {});
+      this.notifier.notifyNewItem(item).catch(() => {});
+    }
 
-    // 5. Enrich top deals (background)
+    // ══ BACKGROUND (non-blocking — don't slow down the next poll) ══
+
+    // These run in the background via unattached promises
+    for (const item of newItems) {
+      this.exporter.addItem(item);
+      if (config.countries.length > 1) this.arbitrage.checkItem(item, country);
+    }
+
+    // Visual matching (heavy — fully background)
+    if (this.imageSearch.references.size > 0) {
+      for (const item of newItems) {
+        this.imageSearch.compareItem(item).then(match => {
+          if (match?.matches) {
+            item.visualMatch = match.bestMatch;
+            item.visualSimilarity = match.bestMatch.similarity;
+          }
+        }).catch(() => {});
+      }
+    }
+
+    // Enrich top deals (background, don't block)
     for (const item of newItems) {
       if (item.dealScore >= this.fetchDescriptionThreshold && !item.description) {
         this.search.enrichWithDescription(country, item).catch(() => {});

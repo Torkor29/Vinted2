@@ -105,7 +105,7 @@ export class VintedClient {
         'Cookie': session.cookieString,
         'Connection': 'keep-alive', // ← KEEP-ALIVE
       },
-      timeout: { request: 3_000 },  // ← 3s TIMEOUT
+      timeout: { request: 2_000 },  // ← 2s TIMEOUT (free workers faster)
       responseType: 'json',
       throwHttpErrors: false,
       dnsCache: false, // We handle DNS ourselves
@@ -120,19 +120,21 @@ export class VintedClient {
     await cachedDnsLookup(domain).catch(() => {});
 
     // ── Fire both requests, use Promise.any to get the fastest success ──
+    // Accept any 2xx response — niche queries may legitimately return 0 items.
+    // The old logic rejected empty results, causing unnecessary fallbacks.
     const makeRequest = async (url, epName) => {
       const start = Date.now();
       const response = await gotScraping({ ...baseOptions, url });
       const elapsed = Date.now() - start;
 
       const isOk = response.statusCode >= 200 && response.statusCode < 300;
-      const hasItems = response.body?.items?.length > 0;
 
-      if (!isOk || !hasItems) {
-        throw new Error(`${epName}: ${response.statusCode} (${hasItems ? 'has' : 'no'} items) [${elapsed}ms]`);
+      if (!isOk) {
+        throw new Error(`${epName}: ${response.statusCode} [${elapsed}ms]`);
       }
 
-      log.debug(`⚡ ${epName} won race: ${response.statusCode} (${response.body.items.length} items) [${elapsed}ms]`);
+      const itemCount = response.body?.items?.length || 0;
+      log.debug(`⚡ ${epName} won race: ${response.statusCode} (${itemCount} items) [${elapsed}ms]`);
       return { response, epName, elapsed };
     };
 
@@ -207,7 +209,7 @@ export class VintedClient {
           'Cookie': session.cookieString,
           'Connection': 'keep-alive',
         },
-        timeout: { request: 3_000 },
+        timeout: { request: 2_000 },  // 2s — free workers faster
         responseType: 'json',
         throwHttpErrors: false,
       };

@@ -69,16 +69,16 @@ const defaults = {
 
   // ── Scraper settings ──
   scraper: {
-    pollIntervalMs: 800,         // 800ms fallback polling (if turbo disabled)
-    retryAttempts: 3,
-    retryBackoffMs: 1_500,
-    requestTimeoutMs: 3_000,     // 3s timeout (fast-fail, free up workers)
+    pollIntervalMs: 500,         // 500ms fallback polling (if turbo disabled)
+    retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
+    retryBackoffMs: 800,         // 800ms backoff (was 1500)
+    requestTimeoutMs: 2_000,     // 2s timeout (fast-fail, free up workers)
     concurrentQueries: 15,       // 15 parallel workers in turbo mode
     // ── Turbo mode: independent staggered workers ──
     turbo: {
       enabled: true,             // Use TurboPoller instead of cycle-based polling
-      workerDelayMs: 200,        // Min delay between polls per worker
-      staggerMs: 50,             // Stagger between worker starts
+      workerDelayMs: 150,        // 150ms min delay between polls per worker
+      staggerMs: 30,             // 30ms stagger between worker starts
     },
   },
 

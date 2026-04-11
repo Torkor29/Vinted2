@@ -77,6 +77,7 @@ export class SessionPool {
 
   /**
    * Get next session (round-robin).
+   * Proactively triggers background pre-warming when a session approaches its limit.
    */
   async getSession(country) {
     if (!this.pools.has(country) || this.pools.get(country).length === 0) {
@@ -96,8 +97,32 @@ export class SessionPool {
       session = await this.rotateSession(country, idx);
     }
 
+    // ── Proactive pre-warming: if session is at 70% of max requests,
+    // start creating a replacement in the background so rotation is instant ──
+    const threshold = Math.floor(this.sessionConfig.maxRequestsPerSession * 0.7);
+    if (session.requestCount >= threshold && !session._prewarming) {
+      session._prewarming = true;
+      this._prewarmSession(country, idx).catch(() => {});
+    }
+
     this.roundRobin.set(country, idx + 1);
     return session;
+  }
+
+  /**
+   * Pre-warm a replacement session in the background.
+   * When the current session hits rotation, the swap is near-instant.
+   */
+  async _prewarmSession(country, index) {
+    try {
+      const fresh = await this.factory.createSession(country);
+      // Store it as a pending replacement
+      if (!this._pendingReplacements) this._pendingReplacements = new Map();
+      this._pendingReplacements.set(`${country}:${index}`, fresh);
+      log.debug(`Pre-warmed replacement for ${country} slot ${index}`);
+    } catch (error) {
+      log.debug(`Pre-warm failed for ${country}: ${error.message}`);
+    }
   }
 
   reportUsage(session, { success, isEmpty }) {
@@ -123,6 +148,16 @@ export class SessionPool {
   async rotateSession(country, index) {
     const pool = this.pools.get(country);
     const old = pool[index];
+    const key = `${country}:${index}`;
+
+    // ── Use pre-warmed session if available (instant swap) ──
+    if (this._pendingReplacements?.has(key)) {
+      const fresh = this._pendingReplacements.get(key);
+      this._pendingReplacements.delete(key);
+      pool[index] = fresh;
+      log.info(`Rotated (pre-warmed): ${old.id} → ${fresh.id}`);
+      return fresh;
+    }
 
     try {
       const fresh = await this.factory.createSession(country);

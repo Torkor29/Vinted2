@@ -34,7 +34,7 @@ export async function withRetry(fn, {
       log.warn(`${label}: attempt ${i}/${attempts} failed - ${error.message}`);
 
       if (i < attempts) {
-        const delay = backoffMs * Math.pow(1.5, i - 1) + Math.random() * 1000;
+        const delay = backoffMs * Math.pow(1.3, i - 1) + Math.random() * 500;
         await sleep(delay);
       }
     }

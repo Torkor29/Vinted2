@@ -49,8 +49,8 @@ export class TurboPoller {
     this.errorCount = 0;
     this.consecutiveSuccess = 0;
     this.currentDelay = workerDelayMs;
-    this.minDelay = 100;    // Floor: 100ms
-    this.maxDelay = 5000;   // Ceiling: 5s (heavy rate limiting)
+    this.minDelay = 50;     // Floor: 50ms (aggressive but safe with session rotation)
+    this.maxDelay = 3000;   // Ceiling: 3s (recover faster from rate limits)
   }
 
   /**
@@ -187,28 +187,32 @@ export class TurboPoller {
 
   /**
    * Adaptive throttle: speed up after consecutive successes.
+   * More aggressive ramp-up: after just 5 successes, start accelerating.
    */
   _onSuccess() {
     this.consecutiveSuccess++;
     this.errorCount = Math.max(0, this.errorCount - 1);
 
-    // After 10 consecutive successes, try to go faster
-    if (this.consecutiveSuccess > 10 && this.currentDelay > this.minDelay) {
-      this.currentDelay = Math.max(this.minDelay, Math.round(this.currentDelay * 0.9));
+    // After 5 consecutive successes, accelerate faster
+    if (this.consecutiveSuccess > 5 && this.currentDelay > this.minDelay) {
+      this.currentDelay = Math.max(this.minDelay, Math.round(this.currentDelay * 0.85));
     }
   }
 
   /**
    * Adaptive throttle: slow down on errors (rate limits, 403s, etc).
+   * Smarter: only back off hard on 429s, gentle on timeouts.
    */
   _onError(error) {
     this.consecutiveSuccess = 0;
     this.errorCount++;
 
-    // Exponential backoff: each error increases delay
-    if (this.errorCount > 3) {
-      this.currentDelay = Math.min(this.maxDelay, Math.round(this.currentDelay * 1.5));
-      log.warn(`⚡ Throttling: delay → ${this.currentDelay}ms (${this.errorCount} errors)`);
+    const is429 = error.message?.includes('429') || error.message?.includes('Rate');
+    const multiplier = is429 ? 2.0 : 1.3; // Hard backoff on rate limit, gentle on other errors
+
+    if (this.errorCount > 2) {
+      this.currentDelay = Math.min(this.maxDelay, Math.round(this.currentDelay * multiplier));
+      log.warn(`⚡ Throttling: delay → ${this.currentDelay}ms (${this.errorCount} errors, ${is429 ? '429' : 'other'})`);
     }
   }
 }
