@@ -1,4 +1,18 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - bot
+
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
@@ -14,8 +28,6 @@ services:
     restart: unless-stopped
     depends_on:
       - flaresolverr
-    ports:
-      - "3000:10000"
     env_file:
       - .env
     environment:
@@ -23,6 +35,7 @@ services:
       - PORT=10000
       - DASHBOARD_HOST=0.0.0.0
       - FLARESOLVERR_URL=http://flaresolverr:8191/v1
+      - PUBLIC_URL=https://vintedlba.duckdns.org
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data
@@ -36,3 +49,5 @@ services:
 
 volumes:
   bot-logs:
+  caddy-data:
+  caddy-config:
