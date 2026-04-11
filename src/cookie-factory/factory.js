@@ -115,18 +115,31 @@ export class CookieFactory {
     const domain = getDomain(country);
     const baseUrl = getBaseUrl(country);
 
-    const response = await fetch(flaresolverrUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cmd: 'request.get',
-        url: baseUrl,
-        maxTimeout: 60000,
-      }),
-      signal: AbortSignal.timeout(65000),
-    });
-
-    const data = await response.json();
+    // Retry up to 3 times — FlareSolverr may still be starting
+    let data;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(flaresolverrUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cmd: 'request.get',
+            url: baseUrl,
+            maxTimeout: 60000,
+          }),
+          signal: AbortSignal.timeout(65000),
+        });
+        data = await response.json();
+        break;
+      } catch (err) {
+        if (attempt < 3) {
+          log.info(`FlareSolverr not ready (attempt ${attempt}/3), waiting 5s...`);
+          await new Promise(r => setTimeout(r, 5000));
+        } else {
+          throw err;
+        }
+      }
+    }
 
     if (data.status !== 'ok') {
       throw new Error(`FlareSolverr status: ${data.status} — ${data.message || 'unknown'}`);
