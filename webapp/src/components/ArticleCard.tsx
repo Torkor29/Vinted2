@@ -26,7 +26,7 @@ export default function ArticleCard({ item, showDeal }: ArticleCardProps) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-600 text-2xs">
-            No img
+            Photo
           </div>
         )}
         {hasDeal && (

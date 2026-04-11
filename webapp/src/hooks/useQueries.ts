@@ -33,6 +33,8 @@ export function useCatalog() {
     queryKey: ['catalog'],
     queryFn: getCatalog,
     staleTime: 60_000 * 10,
+    retry: 3,
+    retryDelay: 5000,
   })
 }
 

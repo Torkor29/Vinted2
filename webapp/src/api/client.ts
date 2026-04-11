@@ -134,9 +134,37 @@ export const getBotStatus = () => api.get<BotStatus>('/api/bot/status').then(r =
 export const startBot = () => api.post('/api/bot/start').then(r => r.data)
 export const stopBot = () => api.post('/api/bot/stop').then(r => r.data)
 
-// Catalog
-export const getCatalog = () => api.get<CatalogData>('/api/catalog').then(r => r.data)
-export const searchBrands = (q: string) => api.get<Brand[]>('/api/brands/search', { params: { q } }).then(r => r.data)
+// Catalog — normalize backend fields (label → title)
+const normItems = (arr: any[]): any[] =>
+  (arr || []).map((item: any) => ({
+    ...item,
+    title: item.title || item.label || item.name || `#${item.id}`,
+    children: item.children ? normItems(item.children) : undefined,
+  }))
+
+export const getCatalog = async (): Promise<CatalogData> => {
+  const { data } = await api.get('/api/catalog')
+  return {
+    genders: normItems(data.genders || []),
+    categories: normItems(data.categories || []),
+    sizes: normItems(data.sizes || []),
+    colors: (data.colors || []).map((c: any) => ({
+      ...c,
+      title: c.title || c.label || c.name || `#${c.id}`,
+      hex: c.hex || c.code || undefined,
+    })),
+    conditions: normItems(data.conditions || []),
+  }
+}
+
+// Brands — normalize 'label' → 'title'
+export const searchBrands = async (q: string): Promise<Brand[]> => {
+  const { data } = await api.get('/api/brands/search', { params: { q } })
+  return (data || []).map((b: any) => ({
+    ...b,
+    title: b.title || b.label || b.name || `#${b.id}`,
+  }))
+}
 
 // Queries (filters)
 export const getQueries = () => api.get<VintedQuery[]>('/api/queries').then(r => r.data)

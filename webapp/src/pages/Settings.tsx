@@ -110,7 +110,7 @@ export default function Settings() {
 
         {/* Telegram */}
         <a
-          href="https://t.me/vintedsniper"
+          href="https://t.me/lesbonnesaffaires_bot"
           target="_blank"
           rel="noopener noreferrer"
           className="glass-card p-4 btn-press block"

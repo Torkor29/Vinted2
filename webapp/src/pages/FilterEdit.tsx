@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Loader2, Check } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Check, AlertCircle } from 'lucide-react'
 import PageTransition from '../components/PageTransition'
 import CategoryPicker from '../components/CategoryPicker'
 import BrandSearch from '../components/BrandSearch'
@@ -15,10 +15,10 @@ const genderOptions = [
 ]
 
 const conditionOptions = [
-  { id: 6, label: 'Neuf avec \u00e9tiquette' },
-  { id: 1, label: 'Neuf sans \u00e9tiquette' },
-  { id: 2, label: 'Tr\u00e8s bon \u00e9tat' },
-  { id: 3, label: 'Bon \u00e9tat' },
+  { id: 6, label: 'Neuf avec étiquette' },
+  { id: 1, label: 'Neuf sans étiquette' },
+  { id: 2, label: 'Très bon état' },
+  { id: 3, label: 'Bon état' },
   { id: 4, label: 'Satisfaisant' },
 ]
 
@@ -29,7 +29,7 @@ export default function FilterEdit() {
   const editIndex = isEdit ? parseInt(index!) : -1
 
   const { data: queries } = useQueries()
-  const { data: catalog } = useCatalog()
+  const { data: catalog, isLoading: catalogLoading, isError: catalogError } = useCatalog()
   const createMutation = useCreateQuery()
 
   const [name, setName] = useState('')
@@ -47,6 +47,7 @@ export default function FilterEdit() {
   const [statusLabels, setStatusLabels] = useState<string[]>([])
   const [priceFrom, setPriceFrom] = useState('')
   const [priceTo, setPriceTo] = useState('')
+  const [saveError, setSaveError] = useState('')
 
   // Populate from existing query
   useEffect(() => {
@@ -116,6 +117,7 @@ export default function FilterEdit() {
   }
 
   const handleSave = () => {
+    setSaveError('')
     const query: VintedQuery = {
       _name: name || `Filtre ${new Date().toLocaleDateString('fr-FR')}`,
       search_text: searchText || undefined,
@@ -137,6 +139,9 @@ export default function FilterEdit() {
     }
     createMutation.mutate(query, {
       onSuccess: () => navigate('/filters'),
+      onError: (err: any) => {
+        setSaveError(err?.response?.data?.error || err?.message || 'Erreur lors de la sauvegarde')
+      },
     })
   }
 
@@ -159,6 +164,16 @@ export default function FilterEdit() {
         </h1>
       </div>
 
+      {/* Catalog error banner */}
+      {catalogError && (
+        <div className="glass-card p-3 mb-4 bg-danger/5 border-danger/20 flex items-center gap-2">
+          <AlertCircle size={16} className="text-danger shrink-0" />
+          <p className="text-xs text-danger/80">
+            Impossible de charger le catalogue. Vérifiez que le bot est démarré.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-5 pb-24">
         {/* Name */}
         <Section title="Nom du filtre">
@@ -166,13 +181,13 @@ export default function FilterEdit() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: Sneakers Nike pas ch\u00e8res"
+            placeholder="Ex: Sneakers Nike pas chères"
             className="w-full px-3 py-2.5 bg-bg-secondary rounded-xl glass-border text-sm text-white placeholder:text-gray-500 outline-none focus:border-accent/30 transition-colors"
           />
         </Section>
 
         {/* Keyword */}
-        <Section title="Mot-cl\u00e9" badge="Optionnel">
+        <Section title="Mot-clé" badge="Optionnel">
           <input
             type="text"
             value={searchText}
@@ -202,12 +217,13 @@ export default function FilterEdit() {
         </Section>
 
         {/* Categories */}
-        <Section title="Cat\u00e9gories" count={catalogIds.length}>
+        <Section title="Catégories" count={catalogIds.length}>
           <CategoryPicker
             categories={categories}
             selected={catalogIds}
             selectedLabels={catalogLabels}
             onToggle={handleToggleCatalog}
+            isLoading={catalogLoading}
           />
         </Section>
 
@@ -222,7 +238,12 @@ export default function FilterEdit() {
 
         {/* Sizes */}
         <Section title="Tailles" count={sizeIds.length}>
-          {sizes.length > 0 ? (
+          {catalogLoading ? (
+            <div className="flex items-center gap-2 py-4 justify-center">
+              <Loader2 size={14} className="text-accent animate-spin" />
+              <span className="text-xs text-gray-500">Chargement...</span>
+            </div>
+          ) : sizes.length > 0 ? (
             <div className="grid grid-cols-5 gap-1.5">
               {sizes.slice(0, 30).map((size) => {
                 const isSelected = sizeIds.includes(size.id)
@@ -242,13 +263,18 @@ export default function FilterEdit() {
               })}
             </div>
           ) : (
-            <p className="text-xs text-gray-500">Chargement des tailles...</p>
+            <p className="text-xs text-gray-500">Aucune taille disponible</p>
           )}
         </Section>
 
         {/* Colors */}
         <Section title="Couleurs" count={colorIds.length}>
-          {colors.length > 0 ? (
+          {catalogLoading ? (
+            <div className="flex items-center gap-2 py-4 justify-center">
+              <Loader2 size={14} className="text-accent animate-spin" />
+              <span className="text-xs text-gray-500">Chargement...</span>
+            </div>
+          ) : colors.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {colors.map((color) => {
                 const isSelected = colorIds.includes(color.id)
@@ -256,7 +282,7 @@ export default function FilterEdit() {
                   <button
                     key={color.id}
                     onClick={() => handleToggleColor(color.id, color.title)}
-                    className={`btn-press w-9 h-9 rounded-xl border-2 transition-all flex items-center justify-center ${
+                    className={`btn-press w-9 h-9 rounded-xl border-2 transition-all flex items-center justify-center relative ${
                       isSelected ? 'border-accent scale-110' : 'border-transparent'
                     }`}
                     title={color.title}
@@ -276,12 +302,12 @@ export default function FilterEdit() {
               })}
             </div>
           ) : (
-            <p className="text-xs text-gray-500">Chargement des couleurs...</p>
+            <p className="text-xs text-gray-500">Aucune couleur disponible</p>
           )}
         </Section>
 
         {/* Condition */}
-        <Section title="\u00c9tat" count={statusIds.length}>
+        <Section title="État" count={statusIds.length}>
           <div className="flex flex-wrap gap-2">
             {conditionOptions.map((cond) => {
               const isSelected = statusIds.includes(cond.id)
@@ -314,10 +340,10 @@ export default function FilterEdit() {
                 className="w-full px-3 py-2.5 pr-8 bg-bg-secondary rounded-xl glass-border text-sm text-white placeholder:text-gray-500 outline-none focus:border-accent/30 transition-colors"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-                \u20ac
+                €
               </span>
             </div>
-            <span className="text-gray-500 text-xs">\u2013</span>
+            <span className="text-gray-500 text-xs">–</span>
             <div className="relative flex-1">
               <input
                 type="number"
@@ -327,7 +353,7 @@ export default function FilterEdit() {
                 className="w-full px-3 py-2.5 pr-8 bg-bg-secondary rounded-xl glass-border text-sm text-white placeholder:text-gray-500 outline-none focus:border-accent/30 transition-colors"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-                \u20ac
+                €
               </span>
             </div>
           </div>
@@ -338,6 +364,12 @@ export default function FilterEdit() {
       <div
         className="fixed bottom-[56px] left-1/2 -translate-x-1/2 w-full max-w-[480px] p-4 bg-bg/95 backdrop-blur-xl border-t border-glass z-40"
       >
+        {saveError && (
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <AlertCircle size={14} className="text-danger shrink-0" />
+            <p className="text-xs text-danger">{saveError}</p>
+          </div>
+        )}
         <button
           onClick={handleSave}
           disabled={createMutation.isPending}
@@ -348,7 +380,7 @@ export default function FilterEdit() {
           ) : (
             <Save size={16} />
           )}
-          {isEdit ? 'Mettre \u00e0 jour' : 'Enregistrer le filtre'}
+          {isEdit ? 'Mettre à jour' : 'Enregistrer le filtre'}
         </button>
       </div>
     </PageTransition>

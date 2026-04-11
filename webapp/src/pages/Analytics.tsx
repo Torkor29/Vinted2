@@ -78,7 +78,7 @@ export default function Analytics() {
         />
         <KpiCard
           icon={<ArrowUpRight size={16} className="text-emerald-400" />}
-          label="Revenue"
+          label="Revenus"
           value={formatPriceShort(revenue)}
           gradient="bg-emerald-500/15"
         />

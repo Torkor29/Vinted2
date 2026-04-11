@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, Check } from 'lucide-react'
+import { ChevronRight, ChevronDown, Check, Loader2 } from 'lucide-react'
 import { type CatalogCategory } from '../api/client'
 
 interface CategoryPickerProps {
@@ -7,6 +7,7 @@ interface CategoryPickerProps {
   selected: number[]
   selectedLabels: string[]
   onToggle: (id: number, title: string) => void
+  isLoading?: boolean
 }
 
 function CategoryNode({
@@ -76,6 +77,7 @@ export default function CategoryPicker({
   selected,
   selectedLabels,
   onToggle,
+  isLoading,
 }: CategoryPickerProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -87,8 +89,8 @@ export default function CategoryPicker({
       >
         <span className="text-sm text-gray-300">
           {selected.length > 0
-            ? `${selected.length} cat\u00e9gorie${selected.length > 1 ? 's' : ''}`
-            : 'Choisir les cat\u00e9gories'}
+            ? `${selected.length} catégorie${selected.length > 1 ? 's' : ''}`
+            : 'Choisir les catégories'}
         </span>
         {expanded ? (
           <ChevronDown size={16} className="text-gray-500" />
@@ -112,15 +114,27 @@ export default function CategoryPicker({
 
       {expanded && (
         <div className="mt-2 bg-bg-secondary rounded-xl glass-border max-h-72 overflow-y-auto">
-          {categories.map((cat) => (
-            <CategoryNode
-              key={cat.id}
-              cat={cat}
-              selected={selected}
-              onToggle={onToggle}
-              depth={0}
-            />
-          ))}
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8">
+              <Loader2 size={16} className="text-accent animate-spin" />
+              <span className="text-xs text-gray-500">Chargement des catégories...</span>
+            </div>
+          ) : categories.length > 0 ? (
+            categories.map((cat) => (
+              <CategoryNode
+                key={cat.id}
+                cat={cat}
+                selected={selected}
+                onToggle={onToggle}
+                depth={0}
+              />
+            ))
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-xs text-gray-500">Aucune catégorie disponible</p>
+              <p className="text-2xs text-gray-600 mt-1">Le catalogue se charge au démarrage du bot</p>
+            </div>
+          )}
         </div>
       )}
     </div>
