@@ -124,16 +124,74 @@ export class Dashboard {
 
     // Catalog data — live from Vinted API with fallback
     this.app.get('/api/catalog', (req, res) => {
+      // Flatten categories object { genderId: [...] } into a single array with children
+      const flattenCategories = (catObj) => {
+        if (Array.isArray(catObj)) return catObj;
+        const seen = new Set();
+        const result = [];
+        for (const cats of Object.values(catObj || {})) {
+          for (const cat of (cats || [])) {
+            if (!seen.has(cat.id)) {
+              seen.add(cat.id);
+              result.push({
+                id: cat.id,
+                title: cat.label || cat.title || cat.name || '',
+                children: (cat.children || []).map(c => ({
+                  id: c.id,
+                  title: c.label || c.title || c.name || '',
+                  children: (c.children || []).map(sc => ({
+                    id: sc.id,
+                    title: sc.label || sc.title || sc.name || '',
+                  })),
+                })),
+              });
+            }
+          }
+        }
+        return result;
+      };
+
+      // Normalize items: flatten objects and ensure 'title' field exists
+      const normArr = (data) => {
+        let arr = data || [];
+        // If it's an object like { clothing: [...], shoes: [...] }, flatten all arrays
+        if (!Array.isArray(arr) && typeof arr === 'object') {
+          const seen = new Set();
+          arr = [];
+          for (const items of Object.values(data)) {
+            if (Array.isArray(items)) {
+              for (const item of items) {
+                if (!seen.has(item.id)) {
+                  seen.add(item.id);
+                  arr.push(item);
+                }
+              }
+            }
+          }
+        }
+        return arr.map(item => ({
+          ...item,
+          title: item.title || item.label || item.name || `#${item.id}`,
+        }));
+      };
+
       if (liveCatalog.ready) {
         res.json({
-          genders: liveCatalog.getGenders(),
-          categories: liveCatalog.categories,
-          sizes: liveCatalog.getSizes(),
-          colors: liveCatalog.getColors(),
-          conditions: liveCatalog.getConditions(),
+          genders: normArr(liveCatalog.getGenders()),
+          categories: flattenCategories(liveCatalog.categories),
+          sizes: normArr(liveCatalog.getSizes()),
+          colors: normArr(liveCatalog.getColors()),
+          conditions: normArr(liveCatalog.getConditions()),
         });
       } else {
-        res.json(getAllCatalogData());
+        const data = getAllCatalogData();
+        res.json({
+          genders: normArr(data.genders),
+          categories: flattenCategories(data.categories),
+          sizes: normArr(data.sizes),
+          colors: normArr(data.colors),
+          conditions: normArr(data.conditions),
+        });
       }
     });
 
@@ -141,16 +199,17 @@ export class Dashboard {
     this.app.get('/api/brands/search', async (req, res) => {
       const q = req.query.q;
       if (!q || q.length < 2) return res.json([]);
+      const normBrands = (arr) => arr.map(b => ({ id: b.id, title: b.title || b.label || b.name || '' }));
       try {
         const client = this.modules.sniper?.search?.client;
         const country = this.modules.sniper?.fullConfig?.countries?.[0] || 'fr';
-        if (!client) return res.json(getAllCatalogData().brands.filter(b => b.label.toLowerCase().includes(q.toLowerCase())).slice(0, 20));
+        if (!client) return res.json(normBrands(getAllCatalogData().brands.filter(b => (b.label || b.title || '').toLowerCase().includes(q.toLowerCase())).slice(0, 20)));
         const result = await client.request(country, '/catalog/brands', { params: { query: q, per_page: 20 } });
-        const brands = (result?.brands || result?.data?.brands || []).map(b => ({ id: b.id, label: b.title || b.name || b.label }));
-        res.json(brands.length ? brands : getAllCatalogData().brands.filter(b => b.label.toLowerCase().includes(q.toLowerCase())).slice(0, 20));
+        const brands = (result?.brands || result?.data?.brands || []).map(b => ({ id: b.id, title: b.title || b.name || b.label || '' }));
+        res.json(brands.length ? brands : normBrands(getAllCatalogData().brands.filter(b => (b.label || b.title || '').toLowerCase().includes(q.toLowerCase())).slice(0, 20)));
       } catch {
         // Fallback to local catalog
-        res.json(getAllCatalogData().brands.filter(b => b.label.toLowerCase().includes(q.toLowerCase())).slice(0, 20));
+        res.json(normBrands(getAllCatalogData().brands.filter(b => (b.label || b.title || '').toLowerCase().includes(q.toLowerCase())).slice(0, 20)));
       }
     });
 
