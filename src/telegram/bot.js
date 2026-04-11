@@ -679,7 +679,8 @@ export class TelegramBot {
    * Get the public dashboard URL for Mini App.
    */
   getPublicUrl() {
-    return this.config.dashboard?.publicUrl
+    return process.env.WEBAPP_URL
+      || this.config.dashboard?.publicUrl
       || process.env.PUBLIC_URL
       || process.env.RENDER_EXTERNAL_URL
       || null;
@@ -920,12 +921,12 @@ export class TelegramBot {
         keyboard: [
           [{ text: '\ud83d\udcf1 Ouvrir la Mini App', web_app: { url: publicUrl } }],
           [
-            { text: '\ud83d\udd0d Mes Filtres', web_app: { url: `${publicUrl}/filters.html` } },
-            { text: '\ud83d\udcca Statistiques', web_app: { url: `${publicUrl}/#stats` } },
+            { text: '\ud83d\udd0d Mes Filtres', web_app: { url: `${publicUrl}/filters` } },
+            { text: '\ud83d\udcca Statistiques', web_app: { url: `${publicUrl}/analytics` } },
           ],
           [
-            { text: '\ud83d\udc8e P\u00e9pites', web_app: { url: `${publicUrl}/#deals` } },
-            { text: '\u2753 Aide' },
+            { text: '\ud83d\udc8e P\u00e9pites', web_app: { url: `${publicUrl}/pepites` } },
+            { text: '\ud83d\udce1 Feed', web_app: { url: `${publicUrl}/feed` } },
           ],
         ],
       };
@@ -935,8 +936,8 @@ export class TelegramBot {
         inline_keyboard: [
           [{ text: '\ud83d\udcf1 Ouvrir la Mini App', url: publicUrl }],
           [
-            { text: '\ud83d\udd0d Mes Filtres', url: `${publicUrl}/filters.html` },
-            { text: '\ud83d\udc8e P\u00e9pites', url: `${publicUrl}/#deals` },
+            { text: '\ud83d\udd0d Mes Filtres', url: `${publicUrl}/filters` },
+            { text: '\ud83d\udc8e P\u00e9pites', url: `${publicUrl}/pepites` },
           ],
           [{ text: '\u2699\ufe0f Menu', callback_data: 'nav:main' }],
         ],

@@ -226,7 +226,7 @@ export function formatMainMenu(sniper, config) {
     ? { text: '\u26a1 Turbo ON', callback_data: 'act:turbo_off' }
     : { text: '\u26a1 Turbo OFF', callback_data: 'act:turbo_on' };
 
-  const dashboardUrl = config?.dashboard?.publicUrl || null;
+  const dashboardUrl = process.env.WEBAPP_URL || config?.dashboard?.publicUrl || null;
 
   const keyboard = {
     inline_keyboard: [
