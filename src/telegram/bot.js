@@ -784,7 +784,7 @@ export class TelegramBot {
     try {
       switch (command) {
         case '/start':
-          await this.cmdStart(chatId, opts);
+          await this.cmdStart(chatId, message.chat.type, opts);
           break;
         case '/menu':
         case '/settings':
@@ -891,10 +891,13 @@ export class TelegramBot {
    * /menu — Main menu with inline buttons.
    */
   /**
-   * /start — Welcome message with persistent reply keyboard (Mini App buttons).
+   * /start — Welcome message.
+   * In private chat: reply keyboard with web_app Mini App buttons.
+   * In group chat: inline keyboard with link button to Mini App.
    */
-  async cmdStart(chatId, opts) {
+  async cmdStart(chatId, chatType, opts) {
     const publicUrl = this.getPublicUrl();
+    const isPrivate = chatType === 'private';
 
     const welcomeText = [
       `\ud83d\udc8e Je d\u00e9tecte aussi les <b>p\u00e9pites</b> \u2014 les articles dont le prix est bien en dessous du march\u00e9 !`,
@@ -907,32 +910,50 @@ export class TelegramBot {
       `Utilise /help pour voir toutes les commandes.`,
     ].join('\n');
 
-    // Build reply keyboard (persistent buttons at the bottom)
-    const keyboard = { resize_keyboard: true, is_persistent: true };
+    let replyMarkup;
 
-    if (publicUrl?.startsWith('https')) {
-      keyboard.keyboard = [
-        [{ text: '\ud83d\udcf1 Ouvrir la Mini App', web_app: { url: publicUrl } }],
-        [
-          { text: '\ud83d\udd0d Mes Filtres', web_app: { url: `${publicUrl}/filters.html` } },
-          { text: '\ud83d\udcca Statistiques', web_app: { url: `${publicUrl}/#stats` } },
+    if (isPrivate && publicUrl?.startsWith('https')) {
+      // Private chat → reply keyboard with web_app buttons
+      replyMarkup = {
+        resize_keyboard: true,
+        is_persistent: true,
+        keyboard: [
+          [{ text: '\ud83d\udcf1 Ouvrir la Mini App', web_app: { url: publicUrl } }],
+          [
+            { text: '\ud83d\udd0d Mes Filtres', web_app: { url: `${publicUrl}/filters.html` } },
+            { text: '\ud83d\udcca Statistiques', web_app: { url: `${publicUrl}/#stats` } },
+          ],
+          [
+            { text: '\ud83d\udc8e P\u00e9pites', web_app: { url: `${publicUrl}/#deals` } },
+            { text: '\u2753 Aide' },
+          ],
         ],
-        [
-          { text: '\ud83d\udc8e P\u00e9pites', web_app: { url: `${publicUrl}/#deals` } },
-          { text: '\u2753 Aide' },
+      };
+    } else if (publicUrl?.startsWith('https')) {
+      // Group chat → inline keyboard with URL buttons (web_app not allowed in groups)
+      replyMarkup = {
+        inline_keyboard: [
+          [{ text: '\ud83d\udcf1 Ouvrir la Mini App', url: publicUrl }],
+          [
+            { text: '\ud83d\udd0d Mes Filtres', url: `${publicUrl}/filters.html` },
+            { text: '\ud83d\udc8e P\u00e9pites', url: `${publicUrl}/#deals` },
+          ],
+          [{ text: '\u2699\ufe0f Menu', callback_data: 'nav:main' }],
         ],
-      ];
+      };
     } else {
-      // No HTTPS — use regular text buttons
-      keyboard.keyboard = [
-        [{ text: '\ud83d\udcca /menu' }, { text: '\ud83d\udd0d /filtre' }],
-        [{ text: '\u26a1 /turbo' }, { text: '\u2753 /status' }],
-      ];
+      // No HTTPS — fallback text buttons
+      replyMarkup = {
+        inline_keyboard: [
+          [{ text: '\u2699\ufe0f Menu', callback_data: 'nav:main' }],
+          [{ text: '\ud83d\udd0d Filtre', callback_data: 'nav:filters' }],
+        ],
+      };
     }
 
     await this.sendMessage(chatId, welcomeText, {
       ...opts,
-      reply_markup: JSON.stringify(keyboard),
+      reply_markup: JSON.stringify(replyMarkup),
     });
   }
 
