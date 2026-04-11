@@ -1,10 +1,19 @@
-version: "3.8"
-
 services:
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Europe/Paris
+    mem_limit: 1g
+
   bot:
     build: .
     container_name: vinted-bot
     restart: unless-stopped
+    depends_on:
+      - flaresolverr
     ports:
       - "3000:10000"
     env_file:
@@ -13,6 +22,7 @@ services:
       - NODE_ENV=production
       - PORT=10000
       - DASHBOARD_HOST=0.0.0.0
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data

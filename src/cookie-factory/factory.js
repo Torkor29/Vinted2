@@ -60,17 +60,17 @@ export class CookieFactory {
   }
 
   /**
-   * Create a session using the FAST method first (simple HTTP fetch).
-   * Falls back to full Playwright browser if needed.
+   * Create a session. Tries 3 methods in order:
+   * 1. Simple fetch (fastest, works when CF isn't blocking)
+   * 2. FlareSolverr (solves CF challenges via undetected browser)
+   * 3. Playwright browser (last resort)
    */
   async createSession(country = 'fr') {
     const domain = getDomain(country);
     log.info(`Creating session for ${domain}...`);
     const startTime = Date.now();
 
-    // ── Method 1: Simple fetch (like Androz2091/vinted-api) ──
-    // Just GET the homepage → extract session cookie from Set-Cookie header
-    // This works because Vinted sets _vinted_XX_session on first visit
+    // ── Method 1: Simple fetch ──
     try {
       const session = await this.createSessionViaFetch(country);
       if (session) {
@@ -79,19 +79,130 @@ export class CookieFactory {
         return session;
       }
     } catch (error) {
-      log.warn(`Fast fetch method failed: ${error.message} — falling back to browser`);
+      log.warn(`Fetch failed: ${error.message} — trying FlareSolverr`);
     }
 
-    // ── Method 2: Full Playwright browser (Datadome bypass) ──
+    // ── Method 2: FlareSolverr (CF bypass) ──
+    try {
+      const session = await this.createSessionViaFlaresolverr(country);
+      if (session) {
+        const elapsed = Date.now() - startTime;
+        log.info(`Session ${session.id} created via FLARESOLVERR in ${elapsed}ms`);
+        return session;
+      }
+    } catch (error) {
+      log.warn(`FlareSolverr failed: ${error.message} — trying Playwright`);
+    }
+
+    // ── Method 3: Playwright browser (last resort) ──
     try {
       const session = await this.createSessionViaBrowser(country);
       const elapsed = Date.now() - startTime;
       log.info(`Session ${session.id} created via BROWSER in ${elapsed}ms`);
       return session;
     } catch (error) {
-      log.error(`Both methods failed for ${country}: ${error.message}`);
+      log.error(`All 3 methods failed for ${country}: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * METHOD 2: FlareSolverr — solves Cloudflare challenges via undetected browser.
+   * Requires FlareSolverr service running (see docker-compose.yml).
+   */
+  async createSessionViaFlaresolverr(country) {
+    const flaresolverrUrl = process.env.FLARESOLVERR_URL || 'http://flaresolverr:8191/v1';
+    const domain = getDomain(country);
+    const baseUrl = getBaseUrl(country);
+
+    const response = await fetch(flaresolverrUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cmd: 'request.get',
+        url: baseUrl,
+        maxTimeout: 60000,
+      }),
+      signal: AbortSignal.timeout(65000),
+    });
+
+    const data = await response.json();
+
+    if (data.status !== 'ok') {
+      throw new Error(`FlareSolverr status: ${data.status} — ${data.message || 'unknown'}`);
+    }
+
+    const solution = data.solution;
+    if (!solution?.cookies?.length) {
+      throw new Error('FlareSolverr returned no cookies');
+    }
+
+    // Parse cookies from FlareSolverr response
+    const cookieJar = {};
+    const parsedCookies = [];
+    for (const c of solution.cookies) {
+      cookieJar[c.name] = c.value;
+      parsedCookies.push({ name: c.name, value: c.value, domain: c.domain || `.${domain.replace('www.', '')}` });
+    }
+
+    const accessToken = cookieJar['access_token_web'];
+    if (!accessToken) {
+      throw new Error(`No access_token_web from FlareSolverr. Got: ${Object.keys(cookieJar).join(', ')}`);
+    }
+
+    log.info(`FlareSolverr got access_token_web (${accessToken.length} chars) + ${solution.cookies.length} cookies`);
+
+    // Extract CSRF from HTML
+    let csrfToken = null;
+    if (solution.response) {
+      const csrfMatch = solution.response.match(/csrf-token['"]\s*content=['"](.*?)['"]/);
+      if (csrfMatch) csrfToken = csrfMatch[1];
+    }
+
+    const userAgent = solution.userAgent || getRandomUserAgent();
+    const cookieString = Object.entries(cookieJar).map(([k, v]) => `${k}=${v}`).join('; ');
+
+    const session = {
+      id: `${country}-fs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      country,
+      domain,
+      method: 'flaresolverr',
+      cookies: parsedCookies,
+      cookieString,
+      accessToken,
+      refreshToken: cookieJar['refresh_token_web'] || null,
+      datadomeToken: cookieJar['datadome'] || null,
+      csrfToken,
+      headers: {
+        'User-Agent': userAgent,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': getAcceptLangForCountry(country),
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Referer': baseUrl + '/',
+        'Origin': baseUrl,
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+      },
+      userAgent,
+      createdAt: Date.now(),
+      requestCount: 0,
+      emptyResponseCount: 0,
+      errors: 0,
+      alive: true,
+    };
+
+    // Validate
+    const testOk = await this.testSession(session);
+    if (!testOk) {
+      log.warn('FlareSolverr session failed API validation');
+      return null;
+    }
+
+    return session;
   }
 
   /**
