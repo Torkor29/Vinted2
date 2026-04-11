@@ -2773,49 +2773,69 @@ export class TelegramBot {
    */
   async saveFilter(chatId, messageId, userId) {
     const conv = this.getConv(userId);
-    if (!conv) return;
+    if (!conv) {
+      log.warn('saveFilter: no conversation found');
+      await this.editMessage(chatId, messageId, '\u274c Filtre expir\u00e9, relance /filtre.', { inline_keyboard: [
+        [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
+      ]});
+      return;
+    }
     const { data } = conv;
 
-    // Build query object
-    const query = {};
+    try {
+      // Build query object
+      const query = {};
 
-    if (data.text) query.text = data.text;
-    if (data.genderId) query.catalogIds = [String(data.genderId)];
-    if (data.categoryIds.length > 0) query.catalogIds = data.categoryIds.map(String);
-    if (data.brandIds.length > 0) query.brandIds = data.brandIds.map(String);
-    if (data.sizeIds.length > 0) query.sizeIds = data.sizeIds.map(String);
-    if (data.colorIds?.length > 0) query.colorIds = data.colorIds.map(String);
-    if (data.conditionIds.length > 0) query.statusIds = data.conditionIds.map(String);
-    if (data.priceTo) query.priceTo = data.priceTo;
-    if (data.priceFrom) query.priceFrom = data.priceFrom;
+      if (data.text) query.text = data.text;
+      if (data.genderId) query.catalogIds = [String(data.genderId)];
+      if (data.categoryIds?.length > 0) query.catalogIds = data.categoryIds.map(String);
+      if (data.brandIds?.length > 0) query.brandIds = data.brandIds.map(String);
+      if (data.sizeIds?.length > 0) query.sizeIds = data.sizeIds.map(String);
+      if (data.colorIds?.length > 0) query.colorIds = data.colorIds.map(String);
+      if (data.conditionIds?.length > 0) query.statusIds = data.conditionIds.map(String);
+      if (data.priceTo) query.priceTo = data.priceTo;
+      if (data.priceFrom) query.priceFrom = data.priceFrom;
 
-    // Store display labels
-    query._labels = {
-      gender: data.genderLabel,
-      categories: data.categoryLabels.length > 0 ? data.categoryLabels : undefined,
-      brands: data.brandLabels.length > 0 ? data.brandLabels : undefined,
-      sizes: data.sizeLabels.length > 0 ? data.sizeLabels : undefined,
-      colors: data.colorLabels?.length > 0 ? data.colorLabels : undefined,
-      conditions: data.conditionLabels.length > 0 ? data.conditionLabels : undefined,
-    };
+      // Store display labels
+      query._labels = {
+        gender: data.genderLabel || undefined,
+        categories: data.categoryLabels?.length > 0 ? data.categoryLabels : undefined,
+        brands: data.brandLabels?.length > 0 ? data.brandLabels : undefined,
+        sizes: data.sizeLabels?.length > 0 ? data.sizeLabels : undefined,
+        colors: data.colorLabels?.length > 0 ? data.colorLabels : undefined,
+        conditions: data.conditionLabels?.length > 0 ? data.conditionLabels : undefined,
+      };
 
-    // Tag query with the group where the wizard was initiated
-    query._chatId = String(conv.chatId);
+      // Tag query with the group where the wizard was initiated
+      query._chatId = String(conv.chatId || chatId);
 
-    // Add to sniper
-    if (this.sniper?.queries) {
-      this.sniper.queries.push(query);
+      // Add to sniper
+      if (this.sniper?.queries) {
+        this.sniper.queries.push(query);
+      }
+      this.persistQueries();
+      this.clearConv(userId);
+
+      const summary = buildFilterSummaryText(data);
+      await this.editMessage(chatId, messageId,
+        `\u2705 <b>Filtre enregistr\u00e9 !</b>\n\n${summary}`,
+        { inline_keyboard: [
+          [{ text: '\u2795 Autre filtre', callback_data: 'filter:new' }],
+          [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
+        ]}
+      );
+
+      log.info(`Filtre cr\u00e9\u00e9 par user ${userId}: ${JSON.stringify(query._labels)}`);
+    } catch (error) {
+      log.error(`saveFilter crash: ${error.message}\n${error.stack}`);
+      await this.editMessage(chatId, messageId,
+        `\u274c <b>Erreur lors de la cr\u00e9ation du filtre</b>\n\n<code>${escapeHtml(error.message)}</code>`,
+        { inline_keyboard: [
+          [{ text: '\ud83d\udd04 R\u00e9essayer', callback_data: 'fw:save' }],
+          [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
+        ]}
+      );
     }
-    this.persistQueries();
-    this.clearConv(userId);
-
-    await this.editMessage(chatId, messageId,
-      `\u2705 <b>Filtre enregistr\u00e9 !</b>\n\n${buildFilterSummaryText(data)}`,
-      { inline_keyboard: [
-        [{ text: '\u2795 Autre filtre', callback_data: 'filter:new' }],
-        [{ text: '\u21a9\ufe0f Menu', callback_data: 'nav:main' }],
-      ]}
-    );
   }
 
   /**
