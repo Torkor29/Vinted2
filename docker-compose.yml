@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  bot:
+    build: .
+    container_name: vinted-bot
+    restart: unless-stopped
+    ports:
+      - "3000:10000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=10000
+      - DASHBOARD_HOST=0.0.0.0
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - bot-logs:/app/logs
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-logs:
