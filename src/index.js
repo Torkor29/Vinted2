@@ -130,6 +130,17 @@ class VintedSniper {
       log.info(`Session validation: ${validation.passed}/${validation.total} countries OK`);
     }
 
+    // ── Step 2c: Init live catalog (needs working sessions) ──
+    if (!validation.allFailed) {
+      try {
+        const { liveCatalog } = await import('./data/live-catalog.js');
+        const country = config.countries[0] || 'fr';
+        await liveCatalog.init(this.search.client, country);
+      } catch (e) {
+        log.warn(`Live catalog init: ${e.message} (using fallback)`);
+      }
+    }
+
     // ── Step 3: Start dashboard ──
     if (config.dashboard.enabled) {
       this.dashboard.setModules({
