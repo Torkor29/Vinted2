@@ -15,6 +15,7 @@ const log = createLogger('dashboard');
 function getAllowedOrigins() {
   const origins = [
     'https://vinted-bot-ecru.vercel.app',
+    'https://vinted2.vercel.app',
     'http://localhost:5173',
     'https://vintedlba.duckdns.org',
   ];
