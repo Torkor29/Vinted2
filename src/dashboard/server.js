@@ -11,6 +11,17 @@ import { liveCatalog } from '../data/live-catalog.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const log = createLogger('dashboard');
 
+/** Allowed CORS origins for the dashboard API and Socket.IO. */
+function getAllowedOrigins() {
+  const origins = [
+    'https://vinted-bot-ecru.vercel.app',
+    'http://localhost:5173',
+    'https://vintedlba.duckdns.org',
+  ];
+  if (process.env.WEBAPP_URL) origins.push(process.env.WEBAPP_URL);
+  return [...new Set(origins)];
+}
+
 /**
  * Dashboard - Real-time web UI for monitoring and control.
  *
@@ -32,7 +43,7 @@ export class Dashboard {
     this.app = express();
     this.server = createServer(this.app);
     this.io = new SocketIO(this.server, {
-      cors: { origin: '*' },
+      cors: { origin: getAllowedOrigins(), credentials: true },
       pingTimeout: 30000,
       pingInterval: 10000,
     });
@@ -53,6 +64,32 @@ export class Dashboard {
 
   setupRoutes() {
     this.app.use(express.json());
+
+    // ── CORS ──
+    const allowedOrigins = getAllowedOrigins();
+    this.app.use((req, res, next) => {
+      const origin = req.headers.origin;
+      if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+      if (req.method === 'OPTIONS') return res.sendStatus(204);
+      next();
+    });
+
+    // ── API Key auth ──
+    const apiKey = process.env.API_KEY || this.config.apiKey;
+    if (apiKey) {
+      this.app.use('/api', (req, res, next) => {
+        const auth = req.headers.authorization;
+        if (auth === `Bearer ${apiKey}`) return next();
+        res.status(401).json({ error: 'Unauthorized' });
+      });
+      log.info('API key authentication enabled');
+    }
+
     this.app.use(express.static(resolve(__dirname, 'public')));
 
     // ── API Routes ──

@@ -36,6 +36,8 @@ services:
       - DASHBOARD_HOST=0.0.0.0
       - FLARESOLVERR_URL=http://flaresolverr:8191/v1
       - PUBLIC_URL=https://vintedlba.duckdns.org
+      - WEBAPP_URL=https://vinted-bot-ecru.vercel.app
+      - API_KEY=vinted_sk_a7f3e9b2c1d84f6e0123456789abcdef
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data
