@@ -220,10 +220,46 @@ export class Dashboard {
 
     // Queries
     this.app.get('/api/queries', (req, res) => {
-      res.json(this.modules.sniper?.queries || []);
+      // Return queries with both camelCase (engine) and snake_case (webapp) fields
+      const queries = (this.modules.sniper?.queries || []).map(q => ({
+        ...q,
+        search_text: q.text        || q.search_text  || undefined,
+        price_from:  q.priceFrom   || q.price_from   || undefined,
+        price_to:    q.priceTo     || q.price_to     || undefined,
+        brand_ids:   q.brandIds    || q.brand_ids    || undefined,
+        size_ids:    q.sizeIds     || q.size_ids     || undefined,
+        catalog_ids: q.catalogIds  || q.catalog_ids  || undefined,
+        status_ids:  q.statusIds   || q.status_ids   || undefined,
+        color_ids:   q.colorIds    || q.color_ids    || undefined,
+      }));
+      res.json(queries);
     });
     this.app.post('/api/queries', (req, res) => {
-      const query = req.body;
+      const raw = req.body;
+
+      // Normalize webapp snake_case → engine camelCase
+      const query = {
+        text:        raw.text        || raw.search_text  || undefined,
+        priceFrom:   raw.priceFrom   || raw.price_from   || undefined,
+        priceTo:     raw.priceTo     || raw.price_to     || undefined,
+        brandIds:    raw.brandIds    || raw.brand_ids    || undefined,
+        sizeIds:     raw.sizeIds     || raw.size_ids     || undefined,
+        catalogIds:  raw.catalogIds  || raw.catalog_ids  || undefined,
+        statusIds:   raw.statusIds   || raw.status_ids   || undefined,
+        colorIds:    raw.colorIds    || raw.color_ids    || undefined,
+        materialIds: raw.materialIds || raw.material_ids || undefined,
+        gender:      raw.gender      || undefined,
+        order:       raw.order       || undefined,
+        currency:    raw.currency    || undefined,
+        // Preserve internal metadata
+        _name:       raw._name       || undefined,
+        _labels:     raw._labels     || undefined,
+        _chatId:     raw._chatId     || undefined,
+      };
+
+      // Remove undefined keys
+      Object.keys(query).forEach(k => query[k] === undefined && delete query[k]);
+
       if (!query._chatId) {
         const tgConfig = this.modules.sniper?.fullConfig?.notifications?.telegram;
         if (tgConfig?.chatId) query._chatId = String(tgConfig.chatId);
