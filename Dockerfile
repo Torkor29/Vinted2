@@ -1,11 +1,15 @@
 FROM node:20-slim
 
-# Playwright needs these system dependencies
-RUN apt-get update && apt-get install -y \
+# Playwright Chromium needs these system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
     libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
-    libasound2 libxshmfence1 \
+    libasound2 libxshmfence1 libx11-xcb1 libxcb1 \
+    libxext6 libxfixes3 libxi6 libxrender1 libxtst6 \
+    libglib2.0-0 libdbus-1-3 libexpat1 \
+    fonts-liberation fonts-noto-color-emoji \
+    ca-certificates wget \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -13,15 +17,15 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --production
 
-# Install Playwright Chromium
-RUN npx playwright install chromium
+# Install Playwright Chromium with all deps
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install --with-deps chromium
 
 COPY . .
 
-# Render sets PORT env var
 ENV PORT=10000
 ENV NODE_ENV=production
-ENV DASHBOARD_PORT=10000
+ENV DASHBOARD_HOST=0.0.0.0
 
 EXPOSE 10000
 
