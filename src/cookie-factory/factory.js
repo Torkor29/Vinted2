@@ -259,6 +259,15 @@ export class CookieFactory {
           args: [
             '--disable-blink-features=AutomationControlled',
             '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-setuid-sandbox',
+            '--disable-infobars',
+            '--window-size=1920,1080',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--lang=fr-FR,fr',
           ],
         });
       }
@@ -272,14 +281,45 @@ export class CookieFactory {
         extraHTTPHeaders: {
           'Accept-Language': getAcceptLangForCountry(country),
         },
+        // Stealth: pass WebGL and permissions checks
+        permissions: ['geolocation'],
+        colorScheme: 'light',
       });
 
       const page = await context.newPage();
 
-      // Anti-detection
+      // Comprehensive anti-detection
       await page.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => false });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        // Hide webdriver
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        // Fake plugins
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => {
+            const plugins = [
+              { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+              { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+              { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+            ];
+            plugins.length = 3;
+            return plugins;
+          },
+        });
+        // Fake languages
+        Object.defineProperty(navigator, 'languages', { get: () => ['fr-FR', 'fr', 'en-US', 'en'] });
+        // Hide automation
+        delete navigator.__proto__.webdriver;
+        // Fake Chrome runtime
+        window.chrome = { runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
+        // Permissions API override
+        const origQuery = window.navigator.permissions?.query?.bind(window.navigator.permissions);
+        if (origQuery) {
+          window.navigator.permissions.query = (params) => {
+            if (params.name === 'notifications') {
+              return Promise.resolve({ state: Notification.permission });
+            }
+            return origQuery(params);
+          };
+        }
       });
 
       // Navigate
@@ -505,7 +545,7 @@ export class CookieFactory {
    * Wait for Datadome / Cloudflare / any protection to resolve.
    */
   async waitForProtection(page, domain) {
-    const maxWait = 20_000;
+    const maxWait = 30_000;
     const start = Date.now();
 
     while (Date.now() - start < maxWait) {
@@ -525,14 +565,23 @@ export class CookieFactory {
 
       // Check if we're on real Vinted
       if (page.url().includes(domain.replace('www.', ''))) {
-        log.debug('Protection resolved');
-        return;
+        // Double-check: wait for access_token_web cookie to appear
+        const context = page.context();
+        const cookies = await context.cookies();
+        const hasAccessToken = cookies.some(c => c.name === 'access_token_web');
+        if (hasAccessToken) {
+          log.debug('Protection resolved + access_token_web found');
+          return;
+        }
+        log.debug('On Vinted but no access_token_web yet, waiting...');
+        await page.waitForTimeout(2000);
+        continue;
       }
 
       await page.waitForTimeout(1000);
     }
 
-    log.warn('Protection wait timeout');
+    log.warn('Protection wait timeout (30s)');
   }
 
   async handleCookieConsent(page) {
@@ -570,11 +619,11 @@ export class CookieFactory {
 
 function getRandomUserAgent() {
   const agents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
-    'Mozilla/5.0 (X11; CrOS x86_64 14816.131.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15',
   ];
   return agents[Math.floor(Math.random() * agents.length)];
 }
