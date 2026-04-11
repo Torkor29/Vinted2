@@ -1375,7 +1375,6 @@ export class TelegramBot {
     const { formatPurchaseCard } = await import('./formatter.js');
     const msg = formatPurchaseCard(item, purchase);
 
-    if (msg.photo) {
     // Confirm to user (details in mini app)
     await this.sendMessage(chatId, [
       `\u2705 <b>Achat enregistr\u00e9 !</b>`,
