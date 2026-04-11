@@ -240,7 +240,9 @@ export function formatMainMenu(sniper, config) {
         turboBtn,
         { text: '\u2699\ufe0f Config', callback_data: 'nav:config' },
       ],
-      ...(dashboardUrl ? [[{ text: '\ud83d\udcf1 Mini App', url: dashboardUrl }]] : []),
+      ...(dashboardUrl
+        ? [[{ text: '\ud83d\udcf1 Mini App', web_app: { url: dashboardUrl } }]]
+        : []),
     ],
   };
 

@@ -173,6 +173,7 @@ export class TelegramBot {
 
       await this.ensureForumTopics();
       await this.registerCommands();
+      await this.setupMenuButton();
       this.startPolling();
 
       const startup = formatStartupMessage();
@@ -635,19 +636,53 @@ export class TelegramBot {
     try {
       await this.apiCall('setMyCommands', {
         commands: JSON.stringify([
-          { command: 'menu', description: 'Ouvrir le panneau de contr\u00f4le' },
+          { command: 'start', description: 'Menu principal' },
+          { command: 'menu', description: 'Panneau de contrôle' },
           { command: 'status', description: 'Statut rapide du bot' },
-          { command: 'start', description: 'D\u00e9marrer / Menu principal' },
-          { command: 'turbo', description: 'Turbo mode (stats + toggle)' },
-          { command: 'listing', description: 'G\u00e9n\u00e9rer une annonce' },
-          { command: 'bilan', description: 'Bilan comptabilit\u00e9' },
+          { command: 'filtre', description: 'Créer un filtre' },
+          { command: 'turbo', description: 'Turbo mode' },
           { command: 'myid', description: 'Afficher ton ID Telegram' },
         ]),
       });
-      log.debug('Commandes enregistr\u00e9es');
+      log.debug('Commandes enregistrées');
     } catch (error) {
       log.warn(`Echec enregistrement commandes: ${error.message}`);
     }
+  }
+
+  /**
+   * Configure the Telegram Menu Button to open the Mini App (if HTTPS URL available).
+   * Also sends a persistent reply keyboard with quick-access buttons.
+   */
+  async setupMenuButton() {
+    const publicUrl = this.getPublicUrl();
+
+    if (publicUrl?.startsWith('https')) {
+      try {
+        await this.apiCall('setChatMenuButton', {
+          menu_button: JSON.stringify({
+            type: 'web_app',
+            text: 'Mini App',
+            web_app: { url: publicUrl },
+          }),
+        });
+        log.info(`Menu button configured → ${publicUrl}`);
+      } catch (error) {
+        log.warn(`setChatMenuButton failed: ${error.message}`);
+      }
+    } else {
+      log.info('No HTTPS public URL — Menu button not configured (use PUBLIC_URL env var)');
+    }
+  }
+
+  /**
+   * Get the public dashboard URL for Mini App.
+   */
+  getPublicUrl() {
+    return this.config.dashboard?.publicUrl
+      || process.env.PUBLIC_URL
+      || process.env.RENDER_EXTERNAL_URL
+      || null;
   }
 
   // ══════════════════════════════════════════
@@ -748,8 +783,10 @@ export class TelegramBot {
 
     try {
       switch (command) {
-        case '/menu':
         case '/start':
+          await this.cmdStart(chatId, opts);
+          break;
+        case '/menu':
         case '/settings':
           await this.cmdMainMenu(chatId, opts);
           break;
@@ -853,6 +890,52 @@ export class TelegramBot {
   /**
    * /menu — Main menu with inline buttons.
    */
+  /**
+   * /start — Welcome message with persistent reply keyboard (Mini App buttons).
+   */
+  async cmdStart(chatId, opts) {
+    const publicUrl = this.getPublicUrl();
+
+    const welcomeText = [
+      `\ud83d\udc8e Je d\u00e9tecte aussi les <b>p\u00e9pites</b> \u2014 les articles dont le prix est bien en dessous du march\u00e9 !`,
+      '',
+      `<b>Pour commencer :</b>`,
+      `1\ufe0f\u20e3 Ouvre la Mini App pour cr\u00e9er tes filtres`,
+      `2\ufe0f\u20e3 Active les notifications`,
+      `3\ufe0f\u20e3 Attends les alertes !`,
+      '',
+      `Utilise /help pour voir toutes les commandes.`,
+    ].join('\n');
+
+    // Build reply keyboard (persistent buttons at the bottom)
+    const keyboard = { resize_keyboard: true, is_persistent: true };
+
+    if (publicUrl?.startsWith('https')) {
+      keyboard.keyboard = [
+        [{ text: '\ud83d\udcf1 Ouvrir la Mini App', web_app: { url: publicUrl } }],
+        [
+          { text: '\ud83d\udd0d Mes Filtres', web_app: { url: `${publicUrl}/filters.html` } },
+          { text: '\ud83d\udcca Statistiques', web_app: { url: `${publicUrl}/#stats` } },
+        ],
+        [
+          { text: '\ud83d\udc8e P\u00e9pites', web_app: { url: `${publicUrl}/#deals` } },
+          { text: '\u2753 Aide' },
+        ],
+      ];
+    } else {
+      // No HTTPS — use regular text buttons
+      keyboard.keyboard = [
+        [{ text: '\ud83d\udcca /menu' }, { text: '\ud83d\udd0d /filtre' }],
+        [{ text: '\u26a1 /turbo' }, { text: '\u2753 /status' }],
+      ];
+    }
+
+    await this.sendMessage(chatId, welcomeText, {
+      ...opts,
+      reply_markup: JSON.stringify(keyboard),
+    });
+  }
+
   async cmdMainMenu(chatId, opts) {
     const msg = formatMainMenu(this.sniper, this.config);
     await this.sendMessage(chatId, msg.text, {
