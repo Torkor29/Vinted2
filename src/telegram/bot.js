@@ -58,14 +58,9 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 /** Forum topic definitions — created once in the supergroup. */
 const TOPIC_DEFINITIONS = [
-  { key: 'feed',      name: '📡 Feed',              iconColor: 0x6FB9F0 },
-  { key: 'deals',     name: '💎 Deals',             iconColor: 0xFFD67E },
-  { key: 'achats',    name: '🛒 Achats',            iconColor: 0x8EEE98 },
-  { key: 'listings',  name: '🏷️ Mise en vente', iconColor: 0xCB86DB },
-  { key: 'compta',    name: '💰 Comptabilité', iconColor: 0xFFD67E },
-  { key: 'stats',     name: '📊 Stats',             iconColor: 0x8EEE98 },
-  { key: 'alertes',   name: '⚠️ Alertes',           iconColor: 0xFF93B2 },
-  { key: 'logs',      name: '🔧 Logs',              iconColor: 0x7B8389 },
+  { key: 'general',   name: '🏠 Général',           iconColor: 0x6FB9F0 },
+  { key: 'feed',      name: '📡 Feed',              iconColor: 0x8EEE98 },
+  { key: 'pepite',    name: '💎 Pépite',            iconColor: 0xFFD67E },
 ];
 
 /** Steps for the filter creation wizard (order matters). */
@@ -182,7 +177,7 @@ export class TelegramBot {
 
       const startup = formatStartupMessage();
       await this.sendToTopic('feed', startup.text);
-      await this.logToTopic('info', `<b>Bot démarré</b> — @${me.username}`);
+      await this.sendToTopic('general', `ℹ️ <b>Bot démarré</b> — @${me.username}`);
 
       log.info('Bot Telegram pret et en ecoute');
       return true;
@@ -298,12 +293,11 @@ export class TelegramBot {
       log.info(`║  TOPIC IDS — Copie cette valeur dans Render :    ║`);
       log.info(`║  TELEGRAM_TOPIC_IDS=${JSON.stringify(topics)}`);
       log.info(`╚══════════════════════════════════════════════════╝`);
-      // Also send to logs topic if available
-      if (topics.logs) {
+      // Send confirmation to general topic
+      if (topics.general) {
         try {
-          await this.sendToTopic('logs', 
+          await this.sendToTopic('general',
             `🔧 <b>Topic IDs mis à jour</b>\n\n` +
-            `Ajoute cette env var dans Render pour éviter les doublons :\n\n` +
             `<code>TELEGRAM_TOPIC_IDS=${JSON.stringify(topics)}</code>`
           );
         } catch { /* best effort */ }
@@ -376,7 +370,7 @@ export class TelegramBot {
     const icon = icons[level] || '📝';
     const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     try {
-      await this.sendToTopic('logs', `${icon} <code>${time}</code> ${message}`);
+      await this.sendToTopic('general', `${icon} <code>${time}</code> ${message}`);
     } catch { /* best effort — never crash for logging */ }
   }
 
@@ -500,7 +494,7 @@ export class TelegramBot {
   }
 
   /**
-   * Notifies a deal in the Deals topic.
+   * Notifies a deal in the Pépite topic (price analysis vs market average).
    * @param {object} item - Item object
    * @param {string} [targetChatId] - Target group
    */
@@ -508,9 +502,9 @@ export class TelegramBot {
     const msg = formatDeal(item);
     const opts = { reply_markup: msg.reply_markup ? JSON.stringify(msg.reply_markup) : undefined };
     if (msg.photo) {
-      await this.sendPhotoToTopic('deals', msg.photo, msg.text, opts, targetChatId);
+      await this.sendPhotoToTopic('pepite', msg.photo, msg.text, opts, targetChatId);
     } else {
-      await this.sendToTopic('deals', msg.text, opts, targetChatId);
+      await this.sendToTopic('pepite', msg.text, opts, targetChatId);
     }
   }
 
@@ -521,13 +515,7 @@ export class TelegramBot {
    * @param {string} [targetChatId] - Target group
    */
   async notifyAutobuy(item, record, targetChatId = null) {
-    const msg = formatAutobuyAction(item, record);
-    const opts = { reply_markup: msg.reply_markup ? JSON.stringify(msg.reply_markup) : undefined };
-    if (msg.photo) {
-      await this.sendPhotoToTopic('autobuy', msg.photo, msg.text, opts, targetChatId);
-    } else {
-      await this.sendToTopic('autobuy', msg.text, opts, targetChatId);
-    }
+    // Autobuy notifications handled in mini app only — no Telegram message
   }
 
   /**
@@ -537,11 +525,10 @@ export class TelegramBot {
   async notifyAlert(title, details = {}, targetChatId = null) {
     const msg = formatAlert(title, details);
     if (targetChatId) {
-      await this.sendToTopic('alertes', msg.text, {}, targetChatId);
+      await this.sendToTopic('general', msg.text, {}, targetChatId);
     } else {
-      // Broadcast alert to ALL groups
       for (const gid of Object.keys(this.groupTopics)) {
-        await this.sendToTopic('alertes', msg.text, {}, gid);
+        await this.sendToTopic('general', msg.text, {}, gid);
       }
     }
   }
@@ -550,8 +537,7 @@ export class TelegramBot {
    * Sends stats to the Stats topic.
    */
   async notifyStats(stats) {
-    const msg = formatStats(stats);
-    await this.sendToTopic('stats', msg.text);
+    // Stats handled in mini app only — no Telegram message
   }
 
   // ══════════════════════════════════════════
@@ -1390,21 +1376,10 @@ export class TelegramBot {
     const msg = formatPurchaseCard(item, purchase);
 
     if (msg.photo) {
-      await this.sendPhotoToTopic('achats', msg.photo, msg.text, {
-        reply_markup: JSON.stringify(msg.reply_markup),
-      });
-    } else {
-      await this.sendToTopic('achats', msg.text, {
-        reply_markup: JSON.stringify(msg.reply_markup),
-      });
-    }
-
-    // Confirm to user
+    // Confirm to user (details in mini app)
     await this.sendMessage(chatId, [
       `\u2705 <b>Achat enregistr\u00e9 !</b>`,
       `${escapeHtml(item.title)} \u2014 ${totalPaid}\u20ac`,
-      '',
-      `\u27a1\ufe0f Retrouve-le dans le topic <b>\ud83d\uded2 Achats</b>`,
     ].join('\n'));
 
     return true;
@@ -1447,17 +1422,11 @@ export class TelegramBot {
         `\ud83d\udcc8 <b>Marge estim\u00e9e :</b> ${Math.round((result.suggestedPrice?.suggested || 0) * 0.95 - 3 - purchase.totalCost)}\u20ac`,
       ].filter(Boolean).join('\n');
 
-      if (purchase.photo) {
-        await this.sendPhotoToTopic('listings', purchase.photo, listingMsg);
-      } else {
-        await this.sendToTopic('listings', listingMsg);
-      }
-
       // Update purchase status
       purchase.status = 'en_vente';
 
       await this.editMessage(chatId, messageId,
-        `\u2705 Annonce g\u00e9n\u00e9r\u00e9e dans <b>\ud83c\udff7\ufe0f Mise en vente</b>\n\nPrix sugg\u00e9r\u00e9: ${result.suggestedPrice?.suggested}\u20ac`,
+        `\u2705 Annonce g\u00e9n\u00e9r\u00e9e !\n\nPrix sugg\u00e9r\u00e9: ${result.suggestedPrice?.suggested}\u20ac`,
         { inline_keyboard: [
           [{ text: '\u2705 Vendu', callback_data: `sell:${purchaseId}` }],
         ]},
@@ -1576,12 +1545,6 @@ export class TelegramBot {
       '',
       `\ud83d\udcc5 ${new Date().toLocaleDateString('fr-FR')}`,
     ].join('\n');
-
-    if (purchase.photo) {
-      await this.sendPhotoToTopic('compta', purchase.photo, comptaMsg);
-    } else {
-      await this.sendToTopic('compta', comptaMsg);
-    }
 
     // Running totals
     const totalSales = this._sales.length;
@@ -3168,9 +3131,7 @@ export class TelegramBot {
         await this.sendMessage(chatId,
           `\u2705 <b>Achat effectu\u00e9 !</b>\nTX: <code>${result.transactionId || 'N/A'}</code>`
         );
-        await this.sendToTopic('autobuy',
-          `\ud83d\udcb3 <b>Achat manuel</b>\nArticle: ${itemId}\nTX: <code>${result.transactionId || 'N/A'}</code>`
-        );
+        // Autobuy details in mini app only
       } else {
         await this.sendMessage(chatId, `\u274c Achat \u00e9chou\u00e9: ${escapeHtml(result.reason || 'raison inconnue')}`);
       }

@@ -226,6 +226,8 @@ export function formatMainMenu(sniper, config) {
     ? { text: '\u26a1 Turbo ON', callback_data: 'act:turbo_off' }
     : { text: '\u26a1 Turbo OFF', callback_data: 'act:turbo_on' };
 
+  const dashboardUrl = config?.dashboard?.publicUrl || null;
+
   const keyboard = {
     inline_keyboard: [
       [
@@ -235,18 +237,10 @@ export function formatMainMenu(sniper, config) {
         { text: `\u2699\ufe0f Filtres (${queries})`, callback_data: 'nav:filters' },
       ],
       [
-        { text: '\ud83d\udc8e Deals', callback_data: 'nav:deals' },
-        { text: '\ud83e\udd16 Autobuy', callback_data: 'nav:autobuy' },
         turboBtn,
-      ],
-      [
-        { text: '\ud83c\udff7\ufe0f Mise en vente', callback_data: 'nav:listings' },
-        { text: '\ud83d\udcb0 Comptabilit\u00e9', callback_data: 'nav:compta' },
-      ],
-      [
-        { text: '\ud83d\udcca Stats', callback_data: 'nav:stats' },
         { text: '\u2699\ufe0f Config', callback_data: 'nav:config' },
       ],
+      ...(dashboardUrl ? [[{ text: '\ud83d\udcf1 Mini App', url: dashboardUrl }]] : []),
     ],
   };
 
