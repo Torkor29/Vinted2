@@ -66,12 +66,12 @@ export default function Home() {
           />
           <div>
             <p className="text-sm font-semibold text-white">
-              {running ? 'Bot actif' : 'Bot arr\u00eat\u00e9'}
+              {running ? 'Bot actif' : 'Bot arrêté'}
             </p>
             <p className="text-2xs text-gray-500">
               {running
                 ? `${status?.queries || 0} filtre${(status?.queries || 0) > 1 ? 's' : ''} actif${(status?.queries || 0) > 1 ? 's' : ''}`
-                : 'Appuyez pour d\u00e9marrer'}
+                : 'Appuyez pour démarrer'}
             </p>
           </div>
         </div>
@@ -92,14 +92,14 @@ export default function Home() {
       <div className="grid grid-cols-2 gap-3 mb-5">
         <KpiCard
           icon={<Activity size={16} className="text-accent-light" />}
-          label="D\u00e9tect\u00e9s"
+          label="Détectés"
           value={formatNumber(stats?.total_items)}
           sub={stats?.items_today ? `+${stats.items_today} auj.` : undefined}
           gradient="bg-accent/15"
         />
         <KpiCard
           icon={<Gem size={16} className="text-gold" />}
-          label="P\u00e9pites"
+          label="Pépites"
           value={formatNumber(stats?.total_deals)}
           sub={stats?.deals_today ? `+${stats.deals_today} auj.` : undefined}
           gradient="bg-gold/15"
@@ -122,7 +122,7 @@ export default function Home() {
       {recent.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-white">R\u00e9cents</h2>
+            <h2 className="text-sm font-bold text-white">Récents</h2>
             <button
               onClick={() => navigate('/feed')}
               className="btn-press text-2xs text-accent font-semibold"

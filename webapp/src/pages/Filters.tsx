@@ -71,13 +71,13 @@ export default function Filters() {
           </div>
           <p className="text-sm text-gray-400 font-medium mb-1">Aucun filtre</p>
           <p className="text-xs text-gray-500 mb-6">
-            Cr\u00e9ez votre premier filtre pour commencer la d\u00e9tection
+            Créez votre premier filtre pour commencer la détection
           </p>
           <button
             onClick={() => navigate('/filters/new')}
             className="btn-press gradient-purple text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-accent/20"
           >
-            Cr\u00e9er un filtre
+            Créer un filtre
           </button>
         </div>
       )}

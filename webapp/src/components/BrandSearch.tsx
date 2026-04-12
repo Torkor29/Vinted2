@@ -65,14 +65,14 @@ export default function BrandSearch({ selectedIds, selectedLabels, onToggle }: B
                   <span className="truncate">{brand.title}</span>
                   {isSelected && (
                     <span className="text-2xs bg-accent/20 text-accent px-1.5 py-0.5 rounded font-medium ml-2 shrink-0">
-                      Ajout\u00e9
+                      Ajouté
                     </span>
                   )}
                 </button>
               )
             })
           ) : (
-            <div className="p-3 text-xs text-gray-500 text-center">Aucun r\u00e9sultat</div>
+            <div className="p-3 text-xs text-gray-500 text-center">Aucun résultat</div>
           )}
         </div>
       )}

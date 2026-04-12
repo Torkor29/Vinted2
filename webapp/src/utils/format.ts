@@ -1,17 +1,17 @@
 export function formatPrice(price: string | number | undefined): string {
-  if (price === undefined || price === null) return '0,00 \u20ac'
+  if (price === undefined || price === null) return '0,00 €'
   const num = typeof price === 'string' ? parseFloat(price) : price
-  if (isNaN(num)) return '0,00 \u20ac'
+  if (isNaN(num)) return '0,00 €'
   return num.toLocaleString('fr-FR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }) + ' \u20ac'
+  }) + ' €'
 }
 
 export function formatPriceShort(price: number | undefined): string {
-  if (!price) return '0 \u20ac'
-  if (price >= 1000) return (price / 1000).toFixed(1).replace('.0', '') + 'k \u20ac'
-  return Math.round(price) + ' \u20ac'
+  if (!price) return '0 €'
+  if (price >= 1000) return (price / 1000).toFixed(1).replace('.0', '') + 'k €'
+  return Math.round(price) + ' €'
 }
 
 export function formatPercent(value: number | undefined): string {
@@ -32,7 +32,7 @@ export function timeAgo(dateOrTs: string | number | undefined): string {
   const now = Date.now()
   const diff = Math.floor((now - date.getTime()) / 1000)
 
-  if (diff < 5) return '\u00e0 l\'instant'
+  if (diff < 5) return 'maintenant'
   if (diff < 60) return `${diff}s`
   if (diff < 3600) return `${Math.floor(diff / 60)}min`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`
@@ -51,14 +51,23 @@ export function formatDate(dateStr: string | undefined): string {
 
 export function truncate(str: string, max: number): string {
   if (!str) return ''
-  return str.length > max ? str.slice(0, max) + '\u2026' : str
+  return str.length > max ? str.slice(0, max) + '…' : str
 }
 
 export function getImageUrl(item: { photo?: any; photos?: any[] }): string {
+  // Backend may send photo as string URL directly or as an object
+  if (typeof item.photo === 'string' && item.photo) return item.photo
+
   const photo = item.photo || item.photos?.[0]
   if (!photo) return ''
-  const thumb = photo.thumbnails?.find((t: any) => t.type === 'thumb150')
-    || photo.thumbnails?.find((t: any) => t.type === 'thumb310x430')
-    || photo.thumbnails?.[0]
-  return thumb?.url || photo.url || ''
+
+  // If photo is an object with thumbnails
+  if (typeof photo === 'object') {
+    const thumb = photo.thumbnails?.find((t: any) => t.type === 'thumb150')
+      || photo.thumbnails?.find((t: any) => t.type === 'thumb310x430')
+      || photo.thumbnails?.[0]
+    return thumb?.url || photo.url || ''
+  }
+
+  return ''
 }

@@ -32,7 +32,7 @@ export default function Settings() {
         >
           <ArrowLeft size={18} className="text-gray-400" />
         </button>
-        <h1 className="text-lg font-bold text-white">R\u00e9glages</h1>
+        <h1 className="text-lg font-bold text-white">Réglages</h1>
       </div>
 
       <div className="flex flex-col gap-3">
@@ -43,8 +43,8 @@ export default function Settings() {
               <Power size={18} className="text-accent-light" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-white">Contr\u00f4le du bot</h3>
-              <p className="text-2xs text-gray-500">D\u00e9marrer ou arr\u00eater la d\u00e9tection</p>
+              <h3 className="text-sm font-bold text-white">Contrôle du bot</h3>
+              <p className="text-2xs text-gray-500">Démarrer ou arrêter la détection</p>
             </div>
           </div>
           <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-xl">
@@ -55,7 +55,7 @@ export default function Settings() {
                 }`}
               />
               <span className="text-sm text-gray-300 font-medium">
-                {running ? 'Bot actif' : 'Bot arr\u00eat\u00e9'}
+                {running ? 'Bot actif' : 'Bot arrêté'}
               </span>
             </div>
             <button
@@ -67,7 +67,7 @@ export default function Settings() {
                   : 'gradient-purple text-white shadow-sm shadow-accent/20'
               }`}
             >
-              {running ? 'Arr\u00eater' : 'D\u00e9marrer'}
+              {running ? 'Arrêter' : 'Démarrer'}
             </button>
           </div>
         </div>
@@ -97,7 +97,7 @@ export default function Settings() {
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-bold text-white">Mode Turbo</h3>
-              <p className="text-2xs text-gray-500">Rafra\u00eechissement acc\u00e9l\u00e9r\u00e9</p>
+              <p className="text-2xs text-gray-500">Rafraîchissement accéléré</p>
             </div>
             <button
               className="btn-press w-12 h-7 rounded-full bg-bg-secondary glass-border relative transition-all"
@@ -134,13 +134,13 @@ export default function Settings() {
               <Shield size={18} className="text-emerald-400" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-white">Cl\u00e9 API</h3>
+              <h3 className="text-sm font-bold text-white">Clé API</h3>
               <p className="text-2xs text-gray-500">Authentification backend</p>
             </div>
           </div>
           <input
             type="password"
-            placeholder="Entrer la cl\u00e9 API..."
+            placeholder="Entrer la clé API..."
             defaultValue={localStorage.getItem('api_key') || ''}
             onChange={(e) => {
               if (e.target.value) {

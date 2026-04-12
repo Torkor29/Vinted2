@@ -102,7 +102,7 @@ export default function Feed() {
           </div>
           <p className="text-sm text-gray-400 font-medium mb-1">Aucun article</p>
           <p className="text-xs text-gray-500">
-            Les articles appara\u00eetront ici d\u00e8s que le bot d\u00e9tecte des r\u00e9sultats
+            Les articles apparaîtront ici dès que le bot détecte des résultats
           </p>
         </div>
       )}

@@ -13,8 +13,15 @@ export default function ArticleCard({ item, showDeal }: ArticleCardProps) {
   const deal = item as Deal
   const hasDeal = showDeal && deal.discount_percent && deal.discount_percent > 0
 
+  const handleOpen = () => {
+    if (item.url) window.open(item.url, '_blank', 'noopener')
+  }
+
   return (
-    <div className="glass-card p-3 flex gap-3 animate-slide-up">
+    <div
+      className="glass-card p-3 flex gap-3 animate-slide-up cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={handleOpen}
+    >
       {/* Image */}
       <div className="w-[76px] h-[76px] rounded-xl overflow-hidden bg-bg-secondary shrink-0 relative">
         {imageUrl ? (
@@ -73,15 +80,9 @@ export default function ArticleCard({ item, showDeal }: ArticleCardProps) {
           <div className="flex items-center gap-2">
             <span className="text-2xs text-gray-500">{timeAgo(item.created_at_ts || item._detected_at)}</span>
             {item.url && (
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-press w-7 h-7 rounded-lg bg-accent/15 flex items-center justify-center"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="w-7 h-7 rounded-lg bg-accent/15 flex items-center justify-center">
                 <ExternalLink size={13} className="text-accent-light" />
-              </a>
+              </div>
             )}
           </div>
         </div>

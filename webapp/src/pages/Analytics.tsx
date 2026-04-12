@@ -155,7 +155,7 @@ export default function Analytics() {
 
       {/* Detection Stats */}
       <div className="glass-card p-4 mb-5">
-        <h2 className="text-sm font-bold text-white mb-3">D\u00e9tection</h2>
+        <h2 className="text-sm font-bold text-white mb-3">Détection</h2>
         <div className="grid grid-cols-2 gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center">
@@ -180,7 +180,7 @@ export default function Analytics() {
               <Gem size={15} className="text-gold" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">P\u00e9pites auj.</p>
+              <p className="text-xs text-gray-500">Pépites auj.</p>
               <p className="text-sm font-bold text-white">{formatNumber(stats?.deals_today)}</p>
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function Analytics() {
               <Gem size={15} className="text-gold" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">P\u00e9pites total</p>
+              <p className="text-xs text-gray-500">Pépites total</p>
               <p className="text-sm font-bold text-white">{formatNumber(stats?.total_deals)}</p>
             </div>
           </div>
