@@ -2,9 +2,28 @@ import { ExternalLink, Gem } from 'lucide-react'
 import { type VintedItem, type Deal } from '../api/client'
 import { formatPrice, timeAgo, truncate, getImageUrl } from '../utils/format'
 
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        openLink?: (url: string) => void
+      }
+    }
+  }
+}
+
 interface ArticleCardProps {
   item: VintedItem | Deal
   showDeal?: boolean
+}
+
+function openExternal(url: string) {
+  // In Telegram Mini App: use Telegram API to open externally (no page change)
+  if (window.Telegram?.WebApp?.openLink) {
+    window.Telegram.WebApp.openLink(url)
+  } else {
+    window.open(url, '_blank', 'noopener')
+  }
 }
 
 export default function ArticleCard({ item, showDeal }: ArticleCardProps) {
@@ -14,7 +33,7 @@ export default function ArticleCard({ item, showDeal }: ArticleCardProps) {
   const hasDeal = showDeal && deal.discount_percent && deal.discount_percent > 0
 
   const handleOpen = () => {
-    if (item.url) window.open(item.url, '_blank', 'noopener')
+    if (item.url) openExternal(item.url)
   }
 
   return (
