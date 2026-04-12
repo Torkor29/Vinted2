@@ -229,14 +229,21 @@ export class DealScorer {
         id: item.id,
         title: item.title,
         price: item.price,
+        brand_title: item.brand || '',
+        size_title: item.size || '',
+        photo: item.photo || '',
+        url: item.url || '',
+        currency: item.currency || 'EUR',
         score: score.score,
         confidence: score.confidence,
         label: score.label,
-        median: score.median,
+        market_price: score.median,
+        discount_percent: score.median > 0 ? Math.round((1 - item.price / score.median) * 100) : 0,
         country: item.country || '',
+        created_at_ts: item.scrapedAt ? Math.floor(new Date(item.scrapedAt).getTime() / 1000) : undefined,
         timestamp: new Date().toISOString(),
       });
-      if (this.stats.topDeals.length > 20) this.stats.topDeals.pop();
+      if (this.stats.topDeals.length > 50) this.stats.topDeals.pop();
     }
 
     // Running average
