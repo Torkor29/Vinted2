@@ -122,7 +122,7 @@ export class VintedSearch {
     if (result.error) return [];
 
     // Warmup: first poll seeds the cache silently — no notification flood at startup
-    const queryKey = query.text || query.catalogIds?.join(',') || query.brandIds?.join(',') || '_default';
+    const queryKey = query._name || query.text || query.catalogIds?.join(',') || query.brandIds?.join(',') || '_default';
     if (!this.warmedUpQueries.has(queryKey)) {
       this.warmedUpQueries.add(queryKey);
       for (const item of result.items) {
@@ -137,7 +137,8 @@ export class VintedSearch {
       if (this.seenItems.has(item.id)) return false;
 
       // ── Freshness gate: skip items older than window ──
-      if (FRESHNESS_WINDOW_MS > 0 && item.createdAt) {
+      if (FRESHNESS_WINDOW_MS > 0) {
+        if (!item.createdAt) return false; // No timestamp = skip (don't trust unknown age)
         const age = now - new Date(item.createdAt).getTime();
         if (age > FRESHNESS_WINDOW_MS) return false;
       }
