@@ -73,12 +73,12 @@ const defaults = {
     retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
     retryBackoffMs: 1500,        // 1.5s backoff
     requestTimeoutMs: 5_000,     // 5s timeout (more headroom)
-    concurrentQueries: 10,       // up to 10 workers (1 per proxy)
-    // ── Turbo mode: with 10 proxies, full speed ──
+    concurrentQueries: 5,        // up to 5 workers
+    // ── Turbo mode: BURST → PAUSE → BURST (single IP) ──
     turbo: {
       enabled: true,
-      workerDelayMs: 800,        // 800ms per worker (×10 proxies = 12 req/s)
-      staggerMs: 80,             // 80ms stagger between workers
+      workerDelayMs: 500,        // 500ms burst speed
+      staggerMs: 100,            // 100ms stagger
     },
   },
 

@@ -45,8 +45,10 @@ services:
       - PUBLIC_URL=https://vintedlba.duckdns.org
       - WEBAPP_URL=https://vinted2.vercel.app
       - API_KEY=vinted_sk_a7f3e9b2c1d84f6e0123456789abcdef
-      - PROXY_ENABLED=true
-      - PROXY_LIST=http://pwgjvvnm:bkj8nncz2yst@31.59.20.176:6754,http://pwgjvvnm:bkj8nncz2yst@198.23.239.134:6540,http://pwgjvvnm:bkj8nncz2yst@45.38.107.97:6014,http://pwgjvvnm:bkj8nncz2yst@107.172.163.27:6543,http://pwgjvvnm:bkj8nncz2yst@198.105.121.200:6462,http://pwgjvvnm:bkj8nncz2yst@216.10.27.159:6837,http://pwgjvvnm:bkj8nncz2yst@142.111.67.146:5611,http://pwgjvvnm:bkj8nncz2yst@191.96.254.138:6185,http://pwgjvvnm:bkj8nncz2yst@31.58.9.4:6077,http://pwgjvvnm:bkj8nncz2yst@23.26.71.145:5628
+      # Proxies disabled — datacenter proxies blocked by Cloudflare
+      # Uncomment with RESIDENTIAL proxies when available:
+      # - PROXY_ENABLED=true
+      # - PROXY_LIST=http://user:pass@proxy1:port,http://user:pass@proxy2:port
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data
