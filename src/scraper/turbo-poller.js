@@ -4,36 +4,38 @@ import { sleep } from '../utils/retry.js';
 const log = createLogger('turbo');
 
 /**
- * TurboPoller — Ultra-fast parallel polling engine.
+ * TurboPoller v2 — Human-like parallel polling engine.
  *
- * Instead of the standard cycle-based approach (poll all → wait → repeat),
- * TurboPoller runs independent staggered workers that each poll continuously.
- * This gives ~3-5x faster item detection.
+ * ═══════════════════════════════════════════════════════════
+ *  v2 CHANGES:
+ * ═══════════════════════════════════════════════════════════
  *
- * ════════════════════════════════════════════════════════════════
- *  STANDARD POLLING (before):
- *    [Query1, Query2, Query3] → wait 2s → [Query1, Query2, Query3] → wait 2s
- *    Avg detection delay: ~1s + processing time
+ * 1. HUMAN JITTER: Each poll delay gets ±30% random variation
+ *    Bots poll at uniform intervals → detectable
+ *    Humans have natural timing variation → harder to detect
  *
- *  TURBO POLLING (now):
- *    Worker1: Query1 → 200ms → Query1 → 200ms → ...
- *    Worker2: Query2 → 200ms → Query2 → 200ms → ...
- *    Worker3: Query3 → 200ms → Query3 → 200ms → ...
- *    (all running independently, staggered start)
- *    Avg detection delay: ~100ms
- * ════════════════════════════════════════════════════════════════
+ * 2. SANER DEFAULTS: 8 workers (not 15), 300ms delay (not 150ms)
+ *    With Bearer token + single endpoint: ~3 req/s per worker
+ *    8 workers × 3 req/s = ~24 req/s total (was ~200 req/s!)
+ *    24 req/s is fast enough to catch items within ~300ms
+ *
+ * 3. SMARTER BACKOFF: Gentler on transient errors, harder on 429
+ *    Transient timeout → barely slow down
+ *    429 rate limit → back off hard, then recover gradually
+ *
+ * 4. WORKER HEALTH: Workers auto-pause on sustained errors,
+ *    auto-resume after cooldown. No more error cascades.
+ * ═══════════════════════════════════════════════════════════
  */
 export class TurboPoller {
-  constructor(search, { onNewItems, concurrency = 15, workerDelayMs = 200, staggerMs = 50 } = {}) {
+  constructor(search, { onNewItems, concurrency = 8, workerDelayMs = 300, staggerMs = 80 } = {}) {
     this.search = search;
     this.onNewItems = onNewItems || (() => {});
 
-    // ── Tuning ──
-    this.concurrency = concurrency;    // Max parallel workers
-    this.workerDelayMs = workerDelayMs; // Min delay between polls per worker
-    this.staggerMs = staggerMs;         // Stagger between worker starts
+    this.concurrency = concurrency;
+    this.workerDelayMs = workerDelayMs;
+    this.staggerMs = staggerMs;
 
-    // ── State ──
     this.running = false;
     this.workers = [];
     this.stats = {
@@ -45,12 +47,12 @@ export class TurboPoller {
       workersActive: 0,
     };
 
-    // ── Adaptive throttle: back off on errors, speed up on success ──
-    this.errorCount = 0;
-    this.consecutiveSuccess = 0;
+    // Adaptive throttle per-worker
     this.currentDelay = workerDelayMs;
-    this.minDelay = 50;     // Floor: 50ms (aggressive but safe with session rotation)
-    this.maxDelay = 3000;   // Ceiling: 3s (recover faster from rate limits)
+    this.minDelay = 100;    // Floor: 100ms (safe with Bearer token)
+    this.maxDelay = 5000;   // Ceiling: 5s
+    this.consecutiveSuccess = 0;
+    this.errorCount = 0;
   }
 
   /**
@@ -61,14 +63,11 @@ export class TurboPoller {
     this.running = true;
     this.stats.startedAt = Date.now();
 
-    log.info(`⚡ TurboPoller starting: ${tasks.length} tasks, ${this.concurrency} max workers`);
+    log.info(`TurboPoller starting: ${tasks.length} tasks, ${this.concurrency} max workers`);
 
-    // Distribute tasks across workers — each worker gets a task to poll continuously
-    // If more tasks than workers, workers round-robin through tasks
     const workerCount = Math.min(tasks.length, this.concurrency);
 
     for (let i = 0; i < workerCount; i++) {
-      // Each worker gets assigned tasks in a round-robin fashion
       const workerTasks = tasks.filter((_, idx) => idx % workerCount === i);
       const worker = this._createWorker(i, workerTasks);
       this.workers.push(worker);
@@ -79,26 +78,17 @@ export class TurboPoller {
       }, i * this.staggerMs);
     }
 
-    log.info(`⚡ ${workerCount} workers launched (stagger: ${this.staggerMs}ms)`);
+    log.info(`${workerCount} workers launched (stagger: ${this.staggerMs}ms, delay: ${this.workerDelayMs}ms)`);
   }
 
-  /**
-   * Stop all workers gracefully.
-   */
   async stop() {
     this.running = false;
-    log.info('⚡ TurboPoller stopping...');
-
-    // Wait for all workers to finish their current request
+    log.info('TurboPoller stopping...');
     await Promise.allSettled(this.workers.map(w => w.promise).filter(Boolean));
     this.workers = [];
-
-    log.info(`⚡ TurboPoller stopped. Stats: ${JSON.stringify(this.stats)}`);
+    log.info(`TurboPoller stopped. Stats: ${JSON.stringify(this.stats)}`);
   }
 
-  /**
-   * Get current performance stats.
-   */
   getStats() {
     const uptime = this.stats.startedAt ? Date.now() - this.stats.startedAt : 0;
     const pollsPerMin = uptime > 0 ? Math.round(this.stats.totalPolls / (uptime / 60000)) : 0;
@@ -112,7 +102,7 @@ export class TurboPoller {
   }
 
   /**
-   * Create a single polling worker.
+   * Create a single polling worker with human-like timing.
    */
   _createWorker(id, tasks) {
     const worker = {
@@ -122,6 +112,7 @@ export class TurboPoller {
       polls: 0,
       items: 0,
       errors: 0,
+      consecutiveErrors: 0,
       promise: null,
     };
 
@@ -133,15 +124,24 @@ export class TurboPoller {
         const task = tasks[taskIndex % tasks.length];
         taskIndex++;
 
+        // ── Worker auto-pause on sustained errors ──
+        if (worker.consecutiveErrors >= 10) {
+          const cooldown = 15_000 + Math.random() * 10_000; // 15-25s cooldown
+          log.warn(`Worker${id} pausing ${Math.round(cooldown / 1000)}s (${worker.consecutiveErrors} consecutive errors)`);
+          await sleep(cooldown);
+          worker.consecutiveErrors = 0;
+        }
+
         const start = Date.now();
         try {
           const newItems = await this.search.pollNewItems(task.country, task.query);
           const elapsed = Date.now() - start;
 
           worker.polls++;
+          worker.consecutiveErrors = 0;
           this.stats.totalPolls++;
 
-          // Update rolling average response time
+          // Rolling average response time
           this.stats.avgResponseMs = Math.round(
             this.stats.avgResponseMs * 0.9 + elapsed * 0.1
           );
@@ -150,32 +150,36 @@ export class TurboPoller {
             worker.items += newItems.length;
             this.stats.totalItems += newItems.length;
 
-            log.info(`⚡ Worker${id}: ${newItems.length} new items [${task.country}] (${elapsed}ms)`);
+            log.info(`Worker${id}: ${newItems.length} new items [${task.country}] (${elapsed}ms)`);
 
-            // Fire callback immediately — don't wait for other workers
             try {
               await this.onNewItems(newItems, task.country, task.query);
             } catch (e) {
-              log.error(`⚡ Worker${id} callback error: ${e.message}`);
+              log.error(`Worker${id} callback error: ${e.message}`);
             }
           }
 
-          // ── Adaptive speed: success → speed up ──
           this._onSuccess();
 
         } catch (error) {
           worker.errors++;
+          worker.consecutiveErrors++;
           this.stats.totalErrors++;
 
-          // ── Adaptive speed: error → slow down ──
           this._onError(error);
 
-          log.warn(`⚡ Worker${id} error [${task.country}]: ${error.message}`);
+          // Only log every 5th error to avoid spam
+          if (worker.consecutiveErrors % 5 === 1) {
+            log.warn(`Worker${id} error [${task.country}]: ${error.message} (consecutive: ${worker.consecutiveErrors})`);
+          }
         }
 
-        // Wait before next poll (adaptive delay)
+        // ── Human jitter: ±30% random variation on delay ──
+        const jitter = 1 + (Math.random() - 0.5) * 0.6; // 0.7 to 1.3
+        const delay = Math.round(this.currentDelay * jitter);
+
         if (this.running) {
-          await sleep(this.currentDelay);
+          await sleep(delay);
         }
       }
 
@@ -187,32 +191,41 @@ export class TurboPoller {
 
   /**
    * Adaptive throttle: speed up after consecutive successes.
-   * More aggressive ramp-up: after just 5 successes, start accelerating.
    */
   _onSuccess() {
     this.consecutiveSuccess++;
     this.errorCount = Math.max(0, this.errorCount - 1);
 
-    // After 5 consecutive successes, accelerate faster
-    if (this.consecutiveSuccess > 5 && this.currentDelay > this.minDelay) {
-      this.currentDelay = Math.max(this.minDelay, Math.round(this.currentDelay * 0.85));
+    // After 10 consecutive successes, gradually speed up
+    if (this.consecutiveSuccess > 10 && this.currentDelay > this.minDelay) {
+      this.currentDelay = Math.max(this.minDelay, Math.round(this.currentDelay * 0.92));
     }
   }
 
   /**
-   * Adaptive throttle: slow down on errors (rate limits, 403s, etc).
-   * Smarter: only back off hard on 429s, gentle on timeouts.
+   * Adaptive throttle: slow down on errors.
    */
   _onError(error) {
     this.consecutiveSuccess = 0;
     this.errorCount++;
 
     const is429 = error.message?.includes('429') || error.message?.includes('Rate');
-    const multiplier = is429 ? 2.0 : 1.3; // Hard backoff on rate limit, gentle on other errors
+    const isTimeout = error.message?.includes('ETIMEDOUT') || error.message?.includes('timeout');
+
+    let multiplier;
+    if (is429) {
+      multiplier = 2.5;  // Hard backoff on rate limit
+    } else if (isTimeout) {
+      multiplier = 1.1;  // Gentle on timeouts (server slow, not blocking us)
+    } else {
+      multiplier = 1.3;  // Medium on other errors
+    }
 
     if (this.errorCount > 2) {
       this.currentDelay = Math.min(this.maxDelay, Math.round(this.currentDelay * multiplier));
-      log.warn(`⚡ Throttling: delay → ${this.currentDelay}ms (${this.errorCount} errors, ${is429 ? '429' : 'other'})`);
+      if (this.errorCount % 5 === 0) {
+        log.warn(`Throttling: delay -> ${this.currentDelay}ms (${this.errorCount} errors, ${is429 ? '429' : isTimeout ? 'timeout' : 'other'})`);
+      }
     }
   }
 }

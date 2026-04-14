@@ -38,16 +38,16 @@ const defaults = {
     password: '',
   },
 
-  // ── Session management ──
+  // ── Session management (v3: refresh-based, not rotation-based) ──
   session: {
-    maxRequestsPerSession: 300,   // ~15min per session @ 3s poll = less rotation
-    poolSizePerCountry: 3,        // 3 sessions is enough, less pressure on FlareSolverr
-    rotateOnConsecutiveEmpty: 5,   // more tolerance before rotation
-    rotateOnErrors: 8,             // more tolerance before rotation
-    healthCheckIntervalMs: 120_000, // check every 2min instead of 1min
+    poolSizePerCountry: 2,          // 2 sessions enough with Bearer token + refresh
+    rotateOnConsecutiveEmpty: 8,    // high tolerance (emergency refresh handles it)
+    rotateOnErrors: 10,             // high tolerance (refresh first, rotate last)
+    healthCheckIntervalMs: 180_000, // check every 3min
     browserTimeout: 30_000,
-    // Stagger between session creation (ms) - looks more natural
     creationStaggerMs: 5000,
+    // v3: Token refresh interval (ms) — refresh before 2h JWT expiry
+    tokenRefreshIntervalMs: 90 * 60_000, // 90 minutes (JWT expires at 120min)
   },
 
   // ── Proxy configuration ──
@@ -67,18 +67,18 @@ const defaults = {
     stickyToSession: true,
   },
 
-  // ── Scraper settings ──
+  // ── Scraper settings (v5: saner defaults, human-like timing) ──
   scraper: {
     pollIntervalMs: 500,         // 500ms fallback polling (if turbo disabled)
     retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
-    retryBackoffMs: 800,         // 800ms backoff (was 1500)
-    requestTimeoutMs: 2_000,     // 2s timeout (fast-fail, free up workers)
-    concurrentQueries: 15,       // 15 parallel workers in turbo mode
+    retryBackoffMs: 800,         // 800ms backoff
+    requestTimeoutMs: 3_000,     // 3s timeout
+    concurrentQueries: 8,        // 8 parallel workers (sane for 2 sessions)
     // ── Turbo mode: independent staggered workers ──
     turbo: {
-      enabled: true,             // Use TurboPoller instead of cycle-based polling
-      workerDelayMs: 150,        // 150ms min delay between polls per worker
-      staggerMs: 30,             // 30ms stagger between worker starts
+      enabled: true,
+      workerDelayMs: 300,        // 300ms min delay (with jitter: 210-390ms)
+      staggerMs: 80,             // 80ms stagger between worker starts
     },
   },
 
