@@ -49,8 +49,8 @@ export class TurboPoller {
 
     // Adaptive throttle per-worker
     this.currentDelay = workerDelayMs;
-    this.minDelay = 100;    // Floor: 100ms (safe with Bearer token)
-    this.maxDelay = 5000;   // Ceiling: 5s
+    this.minDelay = 1500;   // Floor: 1.5s (datacenter IPs get rate-limited fast)
+    this.maxDelay = 15000;  // Ceiling: 15s (recover from heavy rate limiting)
     this.consecutiveSuccess = 0;
     this.errorCount = 0;
   }

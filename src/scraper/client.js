@@ -166,10 +166,13 @@ export class VintedClient {
       }
 
       // ── Report usage ──
-      this.sessionPool.reportUsage(session, {
-        success: isOk,
-        isEmpty: (isEmpty || is403) && !hasItems,
-      });
+      // 429 = rate limit, not a session problem — don't count as failure
+      if (!is429) {
+        this.sessionPool.reportUsage(session, {
+          success: isOk,
+          isEmpty: (isEmpty || is403) && !hasItems,
+        });
+      }
 
       if (this.proxyManager) {
         const proxyUrl = this.proxyManager.getProxy(session.id);
@@ -194,8 +197,10 @@ export class VintedClient {
       }
 
       if (is429) {
-        log.warn(`Rate limited on ${session.id} [${elapsed}ms]`);
-        session.errors += 3; // Heavier penalty for rate limiting
+        log.warn(`Rate limited on ${session.id} [${elapsed}ms] — backing off`);
+        // 429 is NOT a session problem, it's a speed problem.
+        // Don't add errors (which trigger rotation), just log it.
+        // The TurboPoller adaptive throttle will slow down automatically.
       }
 
       return {

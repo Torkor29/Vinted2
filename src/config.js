@@ -67,18 +67,18 @@ const defaults = {
     stickyToSession: true,
   },
 
-  // ── Scraper settings (v5: saner defaults, human-like timing) ──
+  // ── Scraper settings (v5: datacenter-safe timing) ──
   scraper: {
-    pollIntervalMs: 500,         // 500ms fallback polling (if turbo disabled)
+    pollIntervalMs: 3000,        // 3s fallback polling (if turbo disabled)
     retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
-    retryBackoffMs: 800,         // 800ms backoff
-    requestTimeoutMs: 3_000,     // 3s timeout
-    concurrentQueries: 8,        // 8 parallel workers (sane for 2 sessions)
+    retryBackoffMs: 1500,        // 1.5s backoff
+    requestTimeoutMs: 5_000,     // 5s timeout (more headroom)
+    concurrentQueries: 3,        // 3 workers max (1 per session)
     // ── Turbo mode: independent staggered workers ──
     turbo: {
       enabled: true,
-      workerDelayMs: 300,        // 300ms min delay (with jitter: 210-390ms)
-      staggerMs: 80,             // 80ms stagger between worker starts
+      workerDelayMs: 2000,       // 2s between polls (with jitter: 1.4-2.6s)
+      staggerMs: 500,            // 500ms stagger between worker starts
     },
   },
 
