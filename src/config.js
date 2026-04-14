@@ -40,14 +40,14 @@ const defaults = {
 
   // ── Session management ──
   session: {
-    maxRequestsPerSession: 80,
-    poolSizePerCountry: 10,      // 10 sessions per country (supports 800ms polling)
-    rotateOnConsecutiveEmpty: 3,
-    rotateOnErrors: 5,
-    healthCheckIntervalMs: 60_000,
+    maxRequestsPerSession: 300,   // ~15min per session @ 3s poll = less rotation
+    poolSizePerCountry: 3,        // 3 sessions is enough, less pressure on FlareSolverr
+    rotateOnConsecutiveEmpty: 5,   // more tolerance before rotation
+    rotateOnErrors: 8,             // more tolerance before rotation
+    healthCheckIntervalMs: 120_000, // check every 2min instead of 1min
     browserTimeout: 30_000,
     // Stagger between session creation (ms) - looks more natural
-    creationStaggerMs: 3000,
+    creationStaggerMs: 5000,
   },
 
   // ── Proxy configuration ──

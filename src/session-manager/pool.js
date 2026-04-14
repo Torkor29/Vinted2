@@ -159,15 +159,26 @@ export class SessionPool {
       return fresh;
     }
 
-    try {
-      const fresh = await this.factory.createSession(country);
-      pool[index] = fresh;
-      log.info(`Rotated: ${old.id} → ${fresh.id}`);
-      return fresh;
-    } catch (error) {
-      log.error(`Rotation failed: ${error.message}`);
-      old.alive = false;
-      return old;
+    // Retry rotation up to 3 times with delay
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const fresh = await this.factory.createSession(country);
+        pool[index] = fresh;
+        log.info(`Rotated: ${old.id} → ${fresh.id}`);
+        return fresh;
+      } catch (error) {
+        if (attempt < 3) {
+          log.warn(`Rotation attempt ${attempt}/3 failed: ${error.message}, retrying in 10s...`);
+          await new Promise(r => setTimeout(r, 10000));
+        } else {
+          log.error(`Rotation failed after 3 attempts: ${error.message}`);
+          // Don't kill the old session — keep using it even if stale, better than nothing
+          old.requestCount = 0; // Reset counter to extend its life
+          old.errors = 0;
+          log.warn(`Keeping old session ${old.id} alive (reset counters)`);
+          return old;
+        }
+      }
     }
   }
 
