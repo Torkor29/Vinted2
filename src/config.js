@@ -40,7 +40,7 @@ const defaults = {
 
   // ── Session management (v3: refresh-based, not rotation-based) ──
   session: {
-    poolSizePerCountry: 2,          // 2 sessions enough with Bearer token + refresh
+    poolSizePerCountry: 3,          // 3 sessions, rotated across 10 proxies
     rotateOnConsecutiveEmpty: 8,    // high tolerance (emergency refresh handles it)
     rotateOnErrors: 10,             // high tolerance (refresh first, rotate last)
     healthCheckIntervalMs: 180_000, // check every 3min
@@ -53,7 +53,7 @@ const defaults = {
   // ── Proxy configuration ──
   proxy: {
     enabled: false,
-    // 'round-robin' | 'random' | 'least-used' | 'sticky'
+    // 'round-robin' | 'random' | 'least-used'
     strategy: 'round-robin',
     // List of proxy URLs: http://user:pass@host:port or socks5://host:port
     list: [],
@@ -62,9 +62,9 @@ const defaults = {
     // Test proxies on startup
     testOnStartup: true,
     // Remove proxy from pool after N consecutive failures
-    maxFailures: 3,
-    // Bind proxy to session (sticky) - important for TLS consistency
-    stickyToSession: true,
+    maxFailures: 5,
+    // Don't bind proxy to session — rotate freely for max speed
+    stickyToSession: false,
   },
 
   // ── Scraper settings (v5: datacenter-safe timing) ──
@@ -73,12 +73,12 @@ const defaults = {
     retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
     retryBackoffMs: 1500,        // 1.5s backoff
     requestTimeoutMs: 5_000,     // 5s timeout (more headroom)
-    concurrentQueries: 5,        // up to 5 workers (1 per query)
-    // ── Turbo mode: BURST → PAUSE → BURST ──
+    concurrentQueries: 10,       // up to 10 workers (1 per proxy)
+    // ── Turbo mode: with 10 proxies, full speed ──
     turbo: {
       enabled: true,
-      workerDelayMs: 500,        // 500ms between polls in burst (fast!)
-      staggerMs: 150,            // 150ms stagger between workers
+      workerDelayMs: 800,        // 800ms per worker (×10 proxies = 12 req/s)
+      staggerMs: 80,             // 80ms stagger between workers
     },
   },
 
