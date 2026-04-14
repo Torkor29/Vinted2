@@ -21,13 +21,20 @@ services:
       - LOG_LEVEL=info
       - TZ=Europe/Paris
     mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   bot:
     build: .
     container_name: vinted-bot
     restart: unless-stopped
     depends_on:
-      - flaresolverr
+      flaresolverr:
+        condition: service_healthy
     env_file:
       - .env
     environment:

@@ -115,9 +115,9 @@ export class CookieFactory {
     const domain = getDomain(country);
     const baseUrl = getBaseUrl(country);
 
-    // Retry up to 3 times — FlareSolverr may still be starting
+    // Retry up to 6 times — FlareSolverr needs 30-60s to start
     let data;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 6; attempt++) {
       try {
         const response = await fetch(flaresolverrUrl, {
           method: 'POST',
@@ -132,9 +132,10 @@ export class CookieFactory {
         data = await response.json();
         break;
       } catch (err) {
-        if (attempt < 3) {
-          log.info(`FlareSolverr not ready (attempt ${attempt}/3), waiting 5s...`);
-          await new Promise(r => setTimeout(r, 5000));
+        if (attempt < 6) {
+          const delay = Math.min(attempt * 5, 15); // 5s, 10s, 15s, 15s, 15s
+          log.info(`FlareSolverr not ready (attempt ${attempt}/6), waiting ${delay}s...`);
+          await new Promise(r => setTimeout(r, delay * 1000));
         } else {
           throw err;
         }
@@ -377,24 +378,27 @@ export class CookieFactory {
     let context = null;
 
     try {
-      if (!this.browser) {
-        this.browser = await chromium.launch({
-          headless: true,
-          args: [
-            '--disable-blink-features=AutomationControlled',
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-setuid-sandbox',
-            '--disable-infobars',
-            '--window-size=1920,1080',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--lang=fr-FR,fr',
-          ],
-        });
+      // Always relaunch browser to avoid stale/closed context errors
+      if (this.browser) {
+        try { await this.browser.close(); } catch {}
+        this.browser = null;
       }
+      this.browser = await chromium.launch({
+        headless: true,
+        args: [
+          '--disable-blink-features=AutomationControlled',
+          '--no-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-setuid-sandbox',
+          '--disable-infobars',
+          '--window-size=1920,1080',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--lang=fr-FR,fr',
+        ],
+      });
 
       const userAgent = getRandomUserAgent();
       context = await this.browser.newContext({
