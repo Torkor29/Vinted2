@@ -197,10 +197,11 @@ export class VintedClient {
       }
 
       if (is429) {
-        log.warn(`Rate limited on ${session.id} [${elapsed}ms] — backing off`);
-        // 429 is NOT a session problem, it's a speed problem.
-        // Don't add errors (which trigger rotation), just log it.
-        // The TurboPoller adaptive throttle will slow down automatically.
+        // 429 is a SPEED problem, not a SESSION problem.
+        // Throw so TurboPoller's burst-pause mechanism catches it.
+        const err = new Error(`Rate limited (429) on ${session.id}`);
+        err.statusCode = 429;
+        throw err;
       }
 
       return {
