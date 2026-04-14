@@ -95,19 +95,47 @@ export class CookieFactory {
   }
 
   /**
-   * REFRESH an existing session — re-fetch homepage for fresh token.
-   * This is the key v3 feature: sessions never die, they just get refreshed.
-   * Returns true if refresh succeeded, false if session should be rotated.
+   * REFRESH an existing session — get fresh token without destroying session.
+   *
+   * STRATEGY (adapts to how the session was originally created):
+   * 1. Try got-scraping fetch with existing cookies (instant, ~1s)
+   * 2. If 403 → use FlareSolverr (same method that created the session)
+   * 3. Return true/false — never throws
    */
   async refreshSession(session) {
     const startTime = Date.now();
-    log.info(`Refreshing session ${session.id}...`);
+    log.info(`Refreshing session ${session.id} (original method: ${session.method})...`);
 
+    // ── Step 1: Try got-scraping fetch (fast path) ──
+    const fetchResult = await this._refreshViaFetch(session);
+    if (fetchResult) {
+      const elapsed = Date.now() - startTime;
+      log.info(`Session ${session.id} refreshed via FETCH in ${elapsed}ms`);
+      return true;
+    }
+
+    // ── Step 2: Fetch failed (403) → use FlareSolverr ──
+    log.info(`Fetch refresh failed for ${session.id}, trying FlareSolverr...`);
+    const fsResult = await this._refreshViaFlaresolverr(session);
+    if (fsResult) {
+      const elapsed = Date.now() - startTime;
+      log.info(`Session ${session.id} refreshed via FLARESOLVERR in ${elapsed}ms`);
+      return true;
+    }
+
+    log.warn(`All refresh methods failed for ${session.id}`);
+    return false;
+  }
+
+  /**
+   * Refresh via got-scraping — fast path (~1s).
+   * Works when Cloudflare doesn't challenge (rare on datacenter IPs).
+   */
+  async _refreshViaFetch(session) {
     try {
       const { gotScraping } = await import('got-scraping');
       const baseUrl = getBaseUrl(session.country);
 
-      // Re-fetch homepage with the SAME User-Agent (fingerprint consistency)
       const response = await gotScraping({
         url: baseUrl,
         headers: {
@@ -122,7 +150,6 @@ export class CookieFactory {
           'Sec-Fetch-Site': 'none',
           'Sec-Fetch-User': '?1',
           'Upgrade-Insecure-Requests': '1',
-          // Send existing cookies — Vinted may issue a new token based on refresh_token
           'Cookie': session.cookieString,
         },
         followRedirect: true,
@@ -131,46 +158,68 @@ export class CookieFactory {
       });
 
       if (response.statusCode >= 400) {
-        log.warn(`Refresh got ${response.statusCode} for ${session.id}`);
+        log.debug(`Fetch refresh got ${response.statusCode}`);
         return false;
       }
 
-      // Extract new cookies
-      const setCookieHeaders = response.headers['set-cookie'];
-      if (!setCookieHeaders) {
-        log.warn(`No Set-Cookie on refresh for ${session.id}`);
+      return this._applyRefreshResponse(session, response);
+    } catch (error) {
+      log.debug(`Fetch refresh error: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Refresh via FlareSolverr — reliable path (~15-20s).
+   * Solves Cloudflare challenge and extracts fresh cookies.
+   */
+  async _refreshViaFlaresolverr(session) {
+    try {
+      const flaresolverrUrl = process.env.FLARESOLVERR_URL || 'http://flaresolverr:8191/v1';
+      const baseUrl = getBaseUrl(session.country);
+
+      const response = await fetch(flaresolverrUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cmd: 'request.get',
+          url: baseUrl,
+          maxTimeout: 60000,
+        }),
+        signal: AbortSignal.timeout(65000),
+      });
+
+      const data = await response.json();
+      if (data.status !== 'ok' || !data.solution?.cookies?.length) {
+        log.debug(`FlareSolverr refresh failed: ${data.status}`);
         return false;
       }
 
-      const cookieArray = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
       const cookieJar = {};
       const parsedCookies = [];
-
-      for (const cookieStr of cookieArray) {
-        const nameValue = cookieStr.split(';')[0];
-        const eqIdx = nameValue.indexOf('=');
-        if (eqIdx === -1) continue;
-        const name = nameValue.slice(0, eqIdx).trim();
-        const value = nameValue.slice(eqIdx + 1).trim();
-        parsedCookies.push({ name, value, domain: `.${session.domain.replace('www.', '')}` });
-        cookieJar[name] = value;
+      for (const c of data.solution.cookies) {
+        cookieJar[c.name] = c.value;
+        parsedCookies.push({
+          name: c.name,
+          value: c.value,
+          domain: c.domain || `.${session.domain.replace('www.', '')}`,
+        });
       }
 
       const newAccessToken = cookieJar['access_token_web'];
       if (!newAccessToken) {
-        log.warn(`No access_token_web on refresh for ${session.id}`);
+        log.debug(`FlareSolverr refresh: no access_token_web`);
         return false;
       }
 
-      // Extract new CSRF if present
+      // Extract CSRF from HTML
       let csrfToken = session.csrfToken;
-      if (response.body) {
-        const body = typeof response.body === 'string' ? response.body : response.body.toString();
-        const csrfMatch = body.match(/csrf-token['"]\s*content=['"](.*?)['"]/);
+      if (data.solution.response) {
+        const csrfMatch = data.solution.response.match(/csrf-token['"]\s*content=['"](.*?)['"]/);
         if (csrfMatch) csrfToken = csrfMatch[1];
       }
 
-      // ── Update session in-place (no new object, no pool disruption) ──
+      // Update session in-place
       session.accessToken = newAccessToken;
       session.refreshToken = cookieJar['refresh_token_web'] || session.refreshToken;
       session.datadomeToken = cookieJar['datadome'] || session.datadomeToken;
@@ -180,25 +229,66 @@ export class CookieFactory {
       session.lastRefreshedAt = Date.now();
       session.errors = 0;
       session.emptyResponseCount = 0;
-      // Don't reset requestCount — it tracks total lifetime usage
-
-      // Update headers with new CSRF
       if (csrfToken) session.headers['X-CSRF-Token'] = csrfToken;
+      // Update UA if FlareSolverr returned one
+      if (data.solution.userAgent) {
+        session.userAgent = data.solution.userAgent;
+        session.headers['User-Agent'] = data.solution.userAgent;
+      }
 
       // Validate
       const testOk = await this.testSession(session);
-      if (!testOk) {
-        log.warn(`Refreshed session ${session.id} failed validation`);
-        return false;
-      }
-
-      const elapsed = Date.now() - startTime;
-      log.info(`Session ${session.id} refreshed OK in ${elapsed}ms (token: ${newAccessToken.length} chars)`);
-      return true;
+      return testOk;
     } catch (error) {
-      log.error(`Refresh failed for ${session.id}: ${error.message}`);
+      log.debug(`FlareSolverr refresh error: ${error.message}`);
       return false;
     }
+  }
+
+  /**
+   * Apply refresh response cookies to session (used by fetch path).
+   */
+  _applyRefreshResponse(session, response) {
+    const setCookieHeaders = response.headers['set-cookie'];
+    if (!setCookieHeaders) return false;
+
+    const cookieArray = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+    const cookieJar = {};
+    const parsedCookies = [];
+
+    for (const cookieStr of cookieArray) {
+      const nameValue = cookieStr.split(';')[0];
+      const eqIdx = nameValue.indexOf('=');
+      if (eqIdx === -1) continue;
+      const name = nameValue.slice(0, eqIdx).trim();
+      const value = nameValue.slice(eqIdx + 1).trim();
+      parsedCookies.push({ name, value, domain: `.${session.domain.replace('www.', '')}` });
+      cookieJar[name] = value;
+    }
+
+    const newAccessToken = cookieJar['access_token_web'];
+    if (!newAccessToken) return false;
+
+    let csrfToken = session.csrfToken;
+    if (response.body) {
+      const body = typeof response.body === 'string' ? response.body : response.body.toString();
+      const csrfMatch = body.match(/csrf-token['"]\s*content=['"](.*?)['"]/);
+      if (csrfMatch) csrfToken = csrfMatch[1];
+    }
+
+    // Update session in-place
+    session.accessToken = newAccessToken;
+    session.refreshToken = cookieJar['refresh_token_web'] || session.refreshToken;
+    session.datadomeToken = cookieJar['datadome'] || session.datadomeToken;
+    session.csrfToken = csrfToken;
+    session.cookies = parsedCookies;
+    session.cookieString = Object.entries(cookieJar).map(([k, v]) => `${k}=${v}`).join('; ');
+    session.lastRefreshedAt = Date.now();
+    session.errors = 0;
+    session.emptyResponseCount = 0;
+    if (csrfToken) session.headers['X-CSRF-Token'] = csrfToken;
+
+    return true;
   }
 
   /**
