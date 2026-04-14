@@ -49,8 +49,8 @@ export class TurboPoller {
 
     // Adaptive throttle per-worker
     this.currentDelay = workerDelayMs;
-    this.minDelay = 1500;   // Floor: 1.5s (datacenter IPs get rate-limited fast)
-    this.maxDelay = 15000;  // Ceiling: 15s (recover from heavy rate limiting)
+    this.minDelay = 2000;   // Floor: 2s (datacenter safe)
+    this.maxDelay = 10000;  // Ceiling: 10s (don't slow too much)
     this.consecutiveSuccess = 0;
     this.errorCount = 0;
   }
@@ -196,9 +196,9 @@ export class TurboPoller {
     this.consecutiveSuccess++;
     this.errorCount = Math.max(0, this.errorCount - 1);
 
-    // After 10 consecutive successes, gradually speed up
-    if (this.consecutiveSuccess > 10 && this.currentDelay > this.minDelay) {
-      this.currentDelay = Math.max(this.minDelay, Math.round(this.currentDelay * 0.92));
+    // After 5 consecutive successes, speed up faster
+    if (this.consecutiveSuccess > 5 && this.currentDelay > this.minDelay) {
+      this.currentDelay = Math.max(this.minDelay, Math.round(this.currentDelay * 0.85));
     }
   }
 
@@ -214,11 +214,11 @@ export class TurboPoller {
 
     let multiplier;
     if (is429) {
-      multiplier = 2.5;  // Hard backoff on rate limit
+      multiplier = 1.5;  // Moderate backoff — rate limit only lasts ~5s on Vinted
     } else if (isTimeout) {
-      multiplier = 1.1;  // Gentle on timeouts (server slow, not blocking us)
+      multiplier = 1.1;  // Gentle on timeouts
     } else {
-      multiplier = 1.3;  // Medium on other errors
+      multiplier = 1.2;  // Light on other errors
     }
 
     if (this.errorCount > 2) {
