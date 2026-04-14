@@ -46,7 +46,7 @@ class VintedSniper {
   constructor() {
     // Core
     this.proxyManager = new ProxyManager(config);
-    this.sessionPool = new SessionPool(config);
+    this.sessionPool = new SessionPool(config, this.proxyManager);
     this.client = new VintedClient(this.sessionPool, this.proxyManager);
     this.search = new VintedSearch(this.client);
     this.notifier = new Notifier(config);

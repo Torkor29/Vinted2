@@ -40,7 +40,7 @@ const defaults = {
 
   // ── Session management (v3: refresh-based, not rotation-based) ──
   session: {
-    poolSizePerCountry: 3,          // 3 sessions, rotated across 10 proxies
+    poolSizePerCountry: 5,          // 5 sessions across 20 residential proxies
     rotateOnConsecutiveEmpty: 8,    // high tolerance (emergency refresh handles it)
     rotateOnErrors: 10,             // high tolerance (refresh first, rotate last)
     healthCheckIntervalMs: 180_000, // check every 3min
@@ -73,12 +73,12 @@ const defaults = {
     retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
     retryBackoffMs: 1500,        // 1.5s backoff
     requestTimeoutMs: 5_000,     // 5s timeout (more headroom)
-    concurrentQueries: 5,        // up to 5 workers
-    // ── Turbo mode: BURST → PAUSE → BURST (single IP) ──
+    concurrentQueries: 10,       // up to 10 workers (spread across 20 proxies)
+    // ── Turbo mode: full speed with residential proxies ──
     turbo: {
       enabled: true,
-      workerDelayMs: 500,        // 500ms burst speed
-      staggerMs: 100,            // 100ms stagger
+      workerDelayMs: 600,        // 600ms per worker (×10 workers = ~16 req/s)
+      staggerMs: 60,             // 60ms stagger
     },
   },
 

@@ -45,10 +45,8 @@ services:
       - PUBLIC_URL=https://vintedlba.duckdns.org
       - WEBAPP_URL=https://vinted2.vercel.app
       - API_KEY=vinted_sk_a7f3e9b2c1d84f6e0123456789abcdef
-      # Proxies disabled — datacenter proxies blocked by Cloudflare
-      # Uncomment with RESIDENTIAL proxies when available:
-      # - PROXY_ENABLED=true
-      # - PROXY_LIST=http://user:pass@proxy1:port,http://user:pass@proxy2:port
+      - PROXY_ENABLED=true
+      - PROXY_LIST=http://pwgjvvnm:bkj8nncz2yst@209.166.3.245:7406,http://pwgjvvnm:bkj8nncz2yst@140.233.169.183:7900,http://pwgjvvnm:bkj8nncz2yst@150.241.117.63:5567,http://pwgjvvnm:bkj8nncz2yst@130.180.237.187:7130,http://pwgjvvnm:bkj8nncz2yst@64.52.31.158:6345,http://pwgjvvnm:bkj8nncz2yst@69.91.142.201:7693,http://pwgjvvnm:bkj8nncz2yst@31.98.14.190:5867,http://pwgjvvnm:bkj8nncz2yst@96.62.187.137:7350,http://pwgjvvnm:bkj8nncz2yst@31.98.13.220:6397,http://pwgjvvnm:bkj8nncz2yst@192.46.200.107:5777,http://pwgjvvnm:bkj8nncz2yst@130.180.232.208:8646,http://pwgjvvnm:bkj8nncz2yst@104.253.199.17:5296,http://pwgjvvnm:bkj8nncz2yst@192.53.67.208:5757,http://pwgjvvnm:bkj8nncz2yst@9.142.198.17:5684,http://pwgjvvnm:bkj8nncz2yst@9.142.9.25:5182,http://pwgjvvnm:bkj8nncz2yst@45.56.177.241:9042,http://pwgjvvnm:bkj8nncz2yst@82.23.61.197:7949,http://pwgjvvnm:bkj8nncz2yst@87.86.8.201:6848,http://pwgjvvnm:bkj8nncz2yst@207.228.7.105:7287,http://pwgjvvnm:bkj8nncz2yst@46.202.3.128:7394
     volumes:
       - ./config.json:/app/config.json
       - ./data:/app/data

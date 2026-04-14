@@ -41,12 +41,27 @@ export class CookieFactory {
   /**
    * Create a new session. Tries multiple methods in order of speed.
    */
-  async createSession(country = 'fr') {
+  async createSession(country = 'fr', proxyUrl = null) {
     const domain = getDomain(country);
-    log.info(`Creating session for ${domain}...`);
+    log.info(`Creating session for ${domain}...${proxyUrl ? ' (via proxy)' : ''}`);
     const startTime = Date.now();
 
-    // ── Method 1: got-scraping fetch (fast, works most of the time) ──
+    // ── Method 1: got-scraping fetch via proxy (residential = no CF block) ──
+    if (proxyUrl) {
+      try {
+        const session = await this.createSessionViaFetch(country, { proxyUrl });
+        if (session) {
+          session.proxyUrl = proxyUrl; // Remember which proxy created this session
+          const elapsed = Date.now() - startTime;
+          log.info(`Session ${session.id} created via FETCH+PROXY in ${elapsed}ms`);
+          return session;
+        }
+      } catch (error) {
+        log.warn(`Fetch via proxy failed: ${error.message}`);
+      }
+    }
+
+    // ── Method 2: got-scraping fetch direct (works on residential IPs) ──
     try {
       const session = await this.createSessionViaFetch(country);
       if (session) {
@@ -58,7 +73,7 @@ export class CookieFactory {
       log.warn(`Fetch attempt 1 failed: ${error.message}`);
     }
 
-    // ── Method 2: got-scraping with alternate User-Agent/headers ──
+    // ── Method 3: got-scraping with alternate UA ──
     try {
       const session = await this.createSessionViaFetch(country, { alternate: true });
       if (session) {
@@ -298,14 +313,14 @@ export class CookieFactory {
    * @param {Object} options
    * @param {boolean} options.alternate - Use alternate fingerprint
    */
-  async createSessionViaFetch(country, { alternate = false } = {}) {
+  async createSessionViaFetch(country, { alternate = false, proxyUrl = null } = {}) {
     const { gotScraping } = await import('got-scraping');
 
     const domain = getDomain(country);
     const baseUrl = getBaseUrl(country);
     const userAgent = alternate ? getAlternateUserAgent() : getRandomUserAgent();
 
-    const response = await gotScraping({
+    const options = {
       url: baseUrl,
       headers: {
         'User-Agent': userAgent,
@@ -319,7 +334,6 @@ export class CookieFactory {
         'Sec-Fetch-Site': 'none',
         'Sec-Fetch-User': '?1',
         'Upgrade-Insecure-Requests': '1',
-        // Alternate: add cache-control headers (different fingerprint)
         ...(alternate && {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',
@@ -328,7 +342,15 @@ export class CookieFactory {
       followRedirect: true,
       timeout: { request: 15_000 },
       throwHttpErrors: false,
-    });
+    };
+
+    // Route through residential proxy if available
+    if (proxyUrl) {
+      options.proxyUrl = proxyUrl;
+      log.debug(`Fetch via proxy: ${proxyUrl.replace(/:[^:]+@/, ':***@')}`);
+    }
+
+    const response = await gotScraping(options);
 
     if (response.statusCode >= 400) {
       throw new Error(`Homepage returned ${response.statusCode}`);

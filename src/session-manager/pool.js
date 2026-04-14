@@ -29,10 +29,11 @@ const log = createLogger('session-pool');
  * - Bot never stops
  */
 export class SessionPool {
-  constructor(config) {
+  constructor(config, proxyManager = null) {
     this.config = config;
     this.sessionConfig = config.session;
     this.factory = new CookieFactory(config);
+    this.proxyManager = proxyManager;
     // Map<country, Session[]>
     this.pools = new Map();
     // Map<country, number> round-robin index
@@ -58,7 +59,9 @@ export class SessionPool {
     const sessions = [];
     for (let i = 0; i < poolSize; i++) {
       try {
-        const session = await this.factory.createSession(country);
+        // Use a different proxy for each session creation (if available)
+        const proxyUrl = this.proxyManager?.getProxy(`init-${country}-${i}`) || null;
+        const session = await this.factory.createSession(country, proxyUrl);
         sessions.push(session);
         // Schedule automatic token refresh for this session
         this._scheduleRefresh(session);
