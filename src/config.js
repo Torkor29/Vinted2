@@ -73,12 +73,12 @@ const defaults = {
     retryAttempts: 2,            // 2 retries (fast-fail, don't waste time)
     retryBackoffMs: 1500,        // 1.5s backoff
     requestTimeoutMs: 5_000,     // 5s timeout (more headroom)
-    concurrentQueries: 3,        // 3 workers max (1 per session)
+    concurrentQueries: 1,        // 1 worker cycles through all queries sequentially
     // ── Turbo mode: independent staggered workers ──
     turbo: {
       enabled: true,
-      workerDelayMs: 2000,       // 2s between polls (with jitter: 1.4-2.6s)
-      staggerMs: 500,            // 500ms stagger between worker starts
+      workerDelayMs: 3000,       // 3s between polls (with jitter: 2.1-3.9s)
+      staggerMs: 500,            // not used with 1 worker
     },
   },
 
